@@ -1,0 +1,36 @@
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Local config
+.env
+.env.*
+!.env.example
+
+# IDE / OS
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
+
+# Local data and model artifacts
+ai-server/data/*
+ai-server/models/*
+!ai-server/data/.gitkeep
+!ai-server/models/.gitkeep
+
+# Build outputs
+dist/
+build/
