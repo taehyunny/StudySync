@@ -1,0 +1,6 @@
+.vs/
+StudySyncClient/
+*.vcxproj.user
+x64/
+Debug/
+Release/

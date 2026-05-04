@@ -17,6 +17,13 @@
     <RootNamespace>StudySyncClient</RootNamespace>
     <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
   </PropertyGroup>
+  <PropertyGroup>
+    <OpenCVRoot Condition="'$(OpenCVRoot)'=='' and Exists('C:\opencv\build\include\opencv2\core\mat.hpp')">C:\opencv\build</OpenCVRoot>
+    <OpenCVRoot Condition="'$(OpenCVRoot)'=='' and '$(OPENCV_DIR)'!=''">$(OPENCV_DIR)</OpenCVRoot>
+    <OpenCVRoot Condition="'$(OpenCVRoot)'==''">C:\opencv\build</OpenCVRoot>
+    <OpenCVWorldLib Condition="'$(Configuration)'=='Debug'">opencv_world4120d.lib</OpenCVWorldLib>
+    <OpenCVWorldLib Condition="'$(Configuration)'!='Debug'">opencv_world4120.lib</OpenCVWorldLib>
+  </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="Configuration">
     <ConfigurationType>Application</ConfigurationType>
@@ -36,14 +43,14 @@
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
   <ItemDefinitionGroup>
     <ClCompile>
-      <AdditionalIncludeDirectories>src\app;include;res;$(OPENCV_DIR)\include;$(ZMQ_DIR)\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>src\app;include;res;$(OpenCVRoot)\include;$(ZMQ_DIR)\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <LanguageStandard>stdcpp17</LanguageStandard>
       <PrecompiledHeader>Use</PrecompiledHeader>
       <PrecompiledHeaderFile>pch.h</PrecompiledHeaderFile>
     </ClCompile>
     <Link>
-      <AdditionalLibraryDirectories>$(OPENCV_DIR)\x64\vc16\lib;$(ZMQ_DIR)\lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
-      <AdditionalDependencies>d2d1.lib;dxgi.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalLibraryDirectories>$(OpenCVRoot)\x64\vc16\lib;$(ZMQ_DIR)\lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalDependencies>$(OpenCVWorldLib);d2d1.lib;dxgi.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>

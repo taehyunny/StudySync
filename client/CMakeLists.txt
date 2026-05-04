@@ -65,6 +65,11 @@ if(MSVC)
 endif()
 
 find_package(OpenCV CONFIG QUIET)
+if(NOT OpenCV_FOUND AND EXISTS "C:/opencv/build/OpenCVConfig.cmake")
+    set(OpenCV_DIR "C:/opencv/build" CACHE PATH "OpenCV config directory" FORCE)
+    find_package(OpenCV CONFIG QUIET)
+endif()
+
 if(OpenCV_FOUND)
     target_link_libraries(StudySyncClient PRIVATE ${OpenCV_LIBS})
     target_compile_definitions(StudySyncClient PRIVATE STUDYSYNC_HAS_OPENCV=1)

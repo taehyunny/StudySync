@@ -92,5 +92,7 @@ client/
 - Visual Studio 2022
 - Windows SDK 10+
 - MFC enabled in Visual Studio Installer
-- OpenCV and ZeroMQ include/lib paths should be set in project properties or via `OPENCV_DIR` / `ZMQ_DIR` property sheets later.
+- OpenCV default path is `C:\opencv\build`. If OpenCV is installed elsewhere, set `OpenCVRoot` or `OPENCV_DIR` in Visual Studio project properties.
+- OpenCV runtime DLL path should include `C:\opencv\build\x64\vc16\bin` when running the executable.
+- ZeroMQ include/lib paths should be set with `ZMQ_DIR` or a property sheet later.
 - CMake build entrypoint: `client/CMakeLists.txt`
