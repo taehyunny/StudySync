@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <Filter Include="app"><UniqueIdentifier>{49C71160-A0AB-46F5-A7B8-11D24F390A91}</UniqueIdentifier></Filter>
+    <Filter Include="capture"><UniqueIdentifier>{3E85D4A7-C159-4626-8C81-5564939A64E0}</UniqueIdentifier></Filter>
+    <Filter Include="render"><UniqueIdentifier>{28D846C9-01FD-4DD4-A4B6-638C978B4CD5}</UniqueIdentifier></Filter>
+    <Filter Include="network"><UniqueIdentifier>{04AE21BA-FE6F-4F00-BA63-EFA8C3C9873A}</UniqueIdentifier></Filter>
+    <Filter Include="event"><UniqueIdentifier>{9F5C5535-84C9-4101-AC94-58D0FD7A652D}</UniqueIdentifier></Filter>
+    <Filter Include="model"><UniqueIdentifier>{2B3F2EC6-3263-41A9-A609-613FE59DE7C2}</UniqueIdentifier></Filter>
+    <Filter Include="core"><UniqueIdentifier>{831B224F-3571-48D8-A0D2-C6F946282C29}</UniqueIdentifier></Filter>
+    <Filter Include="res"><UniqueIdentifier>{4B43C39B-8675-4C2D-BC62-611DAE0D4313}</UniqueIdentifier></Filter>
+  </ItemGroup>
+</Project>

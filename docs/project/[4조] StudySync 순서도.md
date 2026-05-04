@@ -60,7 +60,7 @@ flowchart TD
     B --> C["JWT 로그인"]
     C --> D["메인 화면 진입"]
     D --> E["OpenCV 웹캠 캡처"]
-    E --> F["30fps QLabel 렌더링"]
+    E --> F["30fps MFC/Direct2D 렌더링"]
     F --> G["별도 스레드: 200ms마다 프레임 추출"]
     G --> H["base64 인코딩 후 AI서버 전송"]
     H --> I["AI 응답 수신"]

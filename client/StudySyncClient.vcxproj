@@ -1,0 +1,123 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup Label="ProjectConfigurations">
+    <ProjectConfiguration Include="Debug|x64">
+      <Configuration>Debug</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release|x64">
+      <Configuration>Release</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+  </ItemGroup>
+  <PropertyGroup Label="Globals">
+    <VCProjectVersion>17.0</VCProjectVersion>
+    <ProjectGuid>{7C412E62-B75C-47B1-8C47-D2B38C71CC84}</ProjectGuid>
+    <Keyword>MFCProj</Keyword>
+    <RootNamespace>StudySyncClient</RootNamespace>
+    <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="Configuration">
+    <ConfigurationType>Application</ConfigurationType>
+    <UseDebugLibraries>true</UseDebugLibraries>
+    <PlatformToolset>v143</PlatformToolset>
+    <UseOfMfc>Dynamic</UseOfMfc>
+    <CharacterSet>Unicode</CharacterSet>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="Configuration">
+    <ConfigurationType>Application</ConfigurationType>
+    <UseDebugLibraries>false</UseDebugLibraries>
+    <PlatformToolset>v143</PlatformToolset>
+    <UseOfMfc>Dynamic</UseOfMfc>
+    <WholeProgramOptimization>true</WholeProgramOptimization>
+    <CharacterSet>Unicode</CharacterSet>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+  <ItemDefinitionGroup>
+    <ClCompile>
+      <AdditionalIncludeDirectories>src\app;include;res;$(OPENCV_DIR)\include;$(ZMQ_DIR)\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <LanguageStandard>stdcpp17</LanguageStandard>
+      <PrecompiledHeader>Use</PrecompiledHeader>
+      <PrecompiledHeaderFile>pch.h</PrecompiledHeaderFile>
+    </ClCompile>
+    <Link>
+      <AdditionalLibraryDirectories>$(OPENCV_DIR)\x64\vc16\lib;$(ZMQ_DIR)\lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalDependencies>d2d1.lib;dxgi.lib;%(AdditionalDependencies)</AdditionalDependencies>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemGroup>
+    <ClInclude Include="include\analysis\IPoseAnalyzer.h" />
+    <ClInclude Include="include\analysis\LocalMediaPipePoseAnalyzer.h" />
+    <ClInclude Include="include\analysis\ZmqPoseAnalyzer.h" />
+    <ClInclude Include="include\alert\AlertDispatchThread.h" />
+    <ClInclude Include="include\alert\AlertManager.h" />
+    <ClInclude Include="include\alert\AlertQueue.h" />
+    <ClInclude Include="include\capture\CaptureThread.h" />
+    <ClInclude Include="include\core\RingBuffer.h" />
+    <ClInclude Include="include\core\ThreadSafeQueue.h" />
+    <ClInclude Include="include\core\WorkerThreadPool.h" />
+    <ClInclude Include="include\event\EventQueue.h" />
+    <ClInclude Include="include\event\EventShadowBuffer.h" />
+    <ClInclude Include="include\event\PostureEventDetector.h" />
+    <ClInclude Include="include\model\AnalysisResult.h" />
+    <ClInclude Include="include\model\Alert.h" />
+    <ClInclude Include="include\model\Frame.h" />
+    <ClInclude Include="include\model\PostureEvent.h" />
+    <ClInclude Include="include\network\EventUploadThread.h" />
+    <ClInclude Include="include\network\ClientTransportConfig.h" />
+    <ClInclude Include="include\network\ClientTransportFactory.h" />
+    <ClInclude Include="include\network\HttpJsonlLogSink.h" />
+    <ClInclude Include="include\network\IEventClipStore.h" />
+    <ClInclude Include="include\network\IFrameSender.h" />
+    <ClInclude Include="include\network\ILogSink.h" />
+    <ClInclude Include="include\network\JsonlBatchUploader.h" />
+    <ClInclude Include="include\network\LocalClaimCheckClipStore.h" />
+    <ClInclude Include="include\network\ZmqFrameSender.h" />
+    <ClInclude Include="include\network\ZmqRecvThread.h" />
+    <ClInclude Include="include\network\ZmqSendThread.h" />
+    <ClInclude Include="include\render\D2DRenderer.h" />
+    <ClInclude Include="include\render\OverlayPainter.h" />
+    <ClInclude Include="include\render\RenderThread.h" />
+    <ClInclude Include="res\resource.h" />
+    <ClInclude Include="src\app\framework.h" />
+    <ClInclude Include="src\app\MainFrm.h" />
+    <ClInclude Include="src\app\pch.h" />
+    <ClInclude Include="src\app\StudySyncClientApp.h" />
+    <ClInclude Include="src\app\StudySyncClientView.h" />
+    <ClInclude Include="src\app\targetver.h" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="src\analysis\LocalMediaPipePoseAnalyzer.cpp" />
+    <ClCompile Include="src\analysis\ZmqPoseAnalyzer.cpp" />
+    <ClCompile Include="src\alert\AlertDispatchThread.cpp" />
+    <ClCompile Include="src\alert\AlertManager.cpp" />
+    <ClCompile Include="src\app\MainFrm.cpp" />
+    <ClCompile Include="src\app\pch.cpp">
+      <PrecompiledHeader>Create</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="src\app\StudySyncClientApp.cpp" />
+    <ClCompile Include="src\app\StudySyncClientView.cpp" />
+    <ClCompile Include="src\capture\CaptureThread.cpp" />
+    <ClCompile Include="src\core\WorkerThreadPool.cpp" />
+    <ClCompile Include="src\event\EventShadowBuffer.cpp" />
+    <ClCompile Include="src\event\PostureEventDetector.cpp" />
+    <ClCompile Include="src\network\ZmqRecvThread.cpp" />
+    <ClCompile Include="src\network\ZmqSendThread.cpp" />
+    <ClCompile Include="src\network\EventUploadThread.cpp" />
+    <ClCompile Include="src\network\ClientTransportConfig.cpp" />
+    <ClCompile Include="src\network\ClientTransportFactory.cpp" />
+    <ClCompile Include="src\network\HttpJsonlLogSink.cpp" />
+    <ClCompile Include="src\network\JsonlBatchUploader.cpp" />
+    <ClCompile Include="src\network\LocalClaimCheckClipStore.cpp" />
+    <ClCompile Include="src\network\ZmqFrameSender.cpp" />
+    <ClCompile Include="src\render\D2DRenderer.cpp" />
+    <ClCompile Include="src\render\OverlayPainter.cpp" />
+    <ClCompile Include="src\render\RenderThread.cpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <ResourceCompile Include="res\StudySyncClient.rc" />
+    <None Include="CMakeLists.txt" />
+  </ItemGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+</Project>
