@@ -1,0 +1,722 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>StudySync Client UI Mockup</title>
+  <style>
+    :root {
+      --bg: #eef3f8;
+      --panel: #ffffff;
+      --line: #d7e0ea;
+      --text: #172033;
+      --muted: #667085;
+      --blue: #2563eb;
+      --green: #10b981;
+      --yellow: #f59e0b;
+      --red: #ef4444;
+      --orange: #f97316;
+      --purple: #8b5cf6;
+      --ink: #0f172a;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font-family: "Malgun Gothic", "Noto Sans KR", Arial, sans-serif;
+      letter-spacing: 0;
+    }
+
+    .page {
+      width: min(1480px, calc(100vw - 32px));
+      margin: 24px auto 48px;
+    }
+
+    .topbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      padding: 18px 20px;
+      background: #102033;
+      color: white;
+      border-radius: 8px;
+      box-shadow: 0 8px 24px rgba(15, 23, 42, 0.12);
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      min-width: 0;
+    }
+
+    .brand-mark {
+      width: 34px;
+      height: 34px;
+      border-radius: 8px;
+      background: linear-gradient(135deg, #38bdf8, #10b981);
+      display: grid;
+      place-items: center;
+      font-weight: 800;
+      color: #07111f;
+    }
+
+    .brand h1 {
+      margin: 0;
+      font-size: 19px;
+      line-height: 1.2;
+      white-space: nowrap;
+    }
+
+    .brand p {
+      margin: 2px 0 0;
+      color: #b8c7d8;
+      font-size: 12px;
+    }
+
+    .owner {
+      color: #d6e3f2;
+      font-size: 13px;
+      text-align: right;
+    }
+
+    .mockup-grid {
+      display: grid;
+      grid-template-columns: 360px 1fr;
+      gap: 18px;
+      margin-top: 18px;
+    }
+
+    .stack {
+      display: grid;
+      gap: 18px;
+    }
+
+    .window {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      overflow: hidden;
+      box-shadow: 0 10px 28px rgba(15, 23, 42, 0.08);
+    }
+
+    .window-title {
+      height: 38px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 12px;
+      border-bottom: 1px solid var(--line);
+      background: #f8fafc;
+      color: #344054;
+      font-size: 13px;
+      font-weight: 700;
+    }
+
+    .dots {
+      display: flex;
+      gap: 6px;
+    }
+
+    .dot {
+      width: 9px;
+      height: 9px;
+      border-radius: 50%;
+      background: #cbd5e1;
+    }
+
+    .content {
+      padding: 18px;
+    }
+
+    .login-card {
+      display: grid;
+      gap: 12px;
+    }
+
+    .field {
+      display: grid;
+      gap: 6px;
+    }
+
+    label {
+      color: #475467;
+      font-size: 12px;
+      font-weight: 700;
+    }
+
+    input,
+    select {
+      height: 38px;
+      border: 1px solid #cbd5e1;
+      border-radius: 6px;
+      padding: 0 11px;
+      font: inherit;
+      font-size: 13px;
+      color: var(--text);
+      background: white;
+    }
+
+    button {
+      height: 38px;
+      border: 0;
+      border-radius: 6px;
+      background: var(--blue);
+      color: white;
+      font: inherit;
+      font-size: 13px;
+      font-weight: 800;
+      cursor: default;
+    }
+
+    .link-row {
+      display: flex;
+      justify-content: space-between;
+      color: var(--blue);
+      font-size: 12px;
+      font-weight: 700;
+    }
+
+    .main-layout {
+      display: grid;
+      grid-template-columns: minmax(520px, 1.7fr) minmax(300px, 0.9fr);
+      gap: 16px;
+      min-height: 670px;
+    }
+
+    .video-panel {
+      display: grid;
+      grid-template-rows: auto 1fr auto;
+      gap: 12px;
+    }
+
+    .toolbar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .timer {
+      font-size: 24px;
+      font-weight: 900;
+      color: var(--ink);
+    }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-width: 68px;
+      height: 28px;
+      padding: 0 10px;
+      border-radius: 999px;
+      color: white;
+      font-size: 12px;
+      font-weight: 900;
+    }
+
+    .badge.focus { background: var(--green); }
+    .badge.warn { background: var(--yellow); }
+    .badge.bad { background: var(--red); }
+    .badge.away { background: var(--orange); }
+    .badge.sleep { background: var(--purple); }
+
+    .camera {
+      position: relative;
+      min-height: 440px;
+      border-radius: 8px;
+      overflow: hidden;
+      border: 1px solid #111827;
+      background:
+        radial-gradient(circle at 50% 28%, rgba(255, 255, 255, 0.13), transparent 10%),
+        linear-gradient(160deg, #111827, #1f2937 55%, #0b1320);
+    }
+
+    .camera-grid {
+      position: absolute;
+      inset: 0;
+      background-image:
+        linear-gradient(rgba(255,255,255,0.05) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255,255,255,0.05) 1px, transparent 1px);
+      background-size: 44px 44px;
+    }
+
+    .silhouette {
+      position: absolute;
+      left: 50%;
+      top: 52%;
+      width: 210px;
+      height: 320px;
+      transform: translate(-50%, -50%);
+    }
+
+    .head {
+      position: absolute;
+      left: 75px;
+      top: 12px;
+      width: 62px;
+      height: 72px;
+      border-radius: 48%;
+      background: #3f4b5f;
+      border: 2px solid #65748b;
+    }
+
+    .body {
+      position: absolute;
+      left: 44px;
+      top: 96px;
+      width: 122px;
+      height: 176px;
+      border-radius: 52px 52px 20px 20px;
+      background: #334155;
+      border: 2px solid #64748b;
+    }
+
+    .landmark {
+      position: absolute;
+      width: 9px;
+      height: 9px;
+      border-radius: 50%;
+      background: #22c55e;
+      box-shadow: 0 0 0 3px rgba(34, 197, 94, 0.2);
+    }
+
+    .lm1 { left: 101px; top: 60px; }
+    .lm2 { left: 74px; top: 122px; }
+    .lm3 { left: 137px; top: 122px; }
+    .lm4 { left: 54px; top: 190px; }
+    .lm5 { left: 157px; top: 190px; }
+    .lm6 { left: 86px; top: 270px; }
+    .lm7 { left: 126px; top: 270px; }
+
+    .overlay-line {
+      position: absolute;
+      height: 3px;
+      background: rgba(34, 197, 94, 0.78);
+      transform-origin: left center;
+      border-radius: 2px;
+    }
+
+    .line-neck { left: 105px; top: 72px; width: 54px; transform: rotate(79deg); }
+    .line-shoulder { left: 78px; top: 128px; width: 66px; transform: rotate(0deg); }
+    .line-left { left: 76px; top: 128px; width: 68px; transform: rotate(106deg); }
+    .line-right { left: 142px; top: 128px; width: 68px; transform: rotate(74deg); }
+
+    .angle-chip {
+      position: absolute;
+      left: 16px;
+      top: 16px;
+      padding: 8px 10px;
+      border-radius: 6px;
+      background: rgba(15, 23, 42, 0.82);
+      color: white;
+      font-size: 12px;
+      line-height: 1.5;
+    }
+
+    .camera-footer {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 10px;
+    }
+
+    .metric {
+      padding: 11px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #fbfdff;
+    }
+
+    .metric span {
+      display: block;
+      color: var(--muted);
+      font-size: 11px;
+      font-weight: 700;
+    }
+
+    .metric strong {
+      display: block;
+      margin-top: 4px;
+      color: var(--ink);
+      font-size: 18px;
+    }
+
+    .side-panel {
+      display: grid;
+      gap: 14px;
+      align-content: start;
+    }
+
+    .panel-section {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 14px;
+      background: #fbfdff;
+    }
+
+    .section-title {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 10px;
+      font-size: 13px;
+      font-weight: 900;
+      color: var(--ink);
+    }
+
+    .progress {
+      height: 12px;
+      border-radius: 999px;
+      overflow: hidden;
+      background: #e5e7eb;
+    }
+
+    .bar {
+      height: 100%;
+      background: linear-gradient(90deg, var(--green), #60a5fa);
+    }
+
+    .goal-row {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 8px;
+      margin-top: 9px;
+      color: #475467;
+      font-size: 12px;
+    }
+
+    .alert {
+      border: 2px solid var(--red);
+      background: #fff7f7;
+    }
+
+    .alert h3 {
+      margin: 0 0 8px;
+      color: var(--red);
+      font-size: 16px;
+    }
+
+    .alert p {
+      margin: 0 0 10px;
+      color: #4b5563;
+      font-size: 13px;
+      line-height: 1.55;
+    }
+
+    .stretch-list {
+      display: grid;
+      gap: 8px;
+      margin: 0;
+      padding: 0;
+      list-style: none;
+    }
+
+    .stretch-list li {
+      padding: 8px;
+      border-radius: 6px;
+      background: white;
+      border: 1px solid #fee2e2;
+      font-size: 12px;
+      color: #374151;
+    }
+
+    .forms {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 12px;
+    }
+
+    .chart {
+      height: 150px;
+      display: flex;
+      align-items: end;
+      gap: 10px;
+      padding: 16px 10px 10px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #fbfdff;
+    }
+
+    .chart-bar {
+      flex: 1;
+      min-width: 18px;
+      border-radius: 5px 5px 0 0;
+      background: #60a5fa;
+      position: relative;
+    }
+
+    .chart-bar:nth-child(2) { background: var(--green); }
+    .chart-bar:nth-child(4) { background: var(--yellow); }
+    .chart-bar:nth-child(6) { background: var(--purple); }
+
+    .label-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 10px;
+    }
+
+    .label-button {
+      min-height: 86px;
+      border-radius: 8px;
+      color: white;
+      display: grid;
+      place-items: center;
+      text-align: center;
+      font-weight: 900;
+    }
+
+    .label-button small {
+      display: block;
+      margin-top: 4px;
+      font-size: 12px;
+      font-weight: 700;
+      opacity: 0.9;
+    }
+
+    .color-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 12px;
+    }
+
+    .color-table th,
+    .color-table td {
+      padding: 8px;
+      border-bottom: 1px solid var(--line);
+      text-align: left;
+    }
+
+    .swatch {
+      width: 26px;
+      height: 18px;
+      border-radius: 4px;
+      display: inline-block;
+      vertical-align: middle;
+      margin-right: 8px;
+    }
+
+    @media (max-width: 1100px) {
+      .mockup-grid,
+      .main-layout,
+      .forms {
+        grid-template-columns: 1fr;
+      }
+
+      .camera-footer,
+      .label-grid {
+        grid-template-columns: repeat(2, 1fr);
+      }
+    }
+  </style>
+</head>
+<body>
+  <main class="page">
+    <header class="topbar">
+      <div class="brand">
+        <div class="brand-mark">S</div>
+        <div>
+          <h1>StudySync Client UI Mockup</h1>
+          <p>웹캠 자세 분석, 집중도 추적, 휴식 알림, 재학습 데이터 수집</p>
+        </div>
+      </div>
+      <div class="owner">담당: 정태현 · Client</div>
+    </header>
+
+    <section class="mockup-grid">
+      <div class="stack">
+        <article class="window">
+          <div class="window-title">
+            <span>로그인</span>
+            <div class="dots"><span class="dot"></span><span class="dot"></span><span class="dot"></span></div>
+          </div>
+          <div class="content login-card">
+            <div class="field">
+              <label>이메일</label>
+              <input value="student@studysync.kr" aria-label="이메일" />
+            </div>
+            <div class="field">
+              <label>비밀번호</label>
+              <input value="••••••••••" aria-label="비밀번호" />
+            </div>
+            <button>로그인</button>
+            <div class="link-row">
+              <span>회원가입</span>
+              <span>자동 로그인: JWT 저장</span>
+            </div>
+          </div>
+        </article>
+
+        <article class="window">
+          <div class="window-title">
+            <span>목표 설정</span>
+            <div class="dots"><span class="dot"></span><span class="dot"></span><span class="dot"></span></div>
+          </div>
+          <div class="content">
+            <div class="forms">
+              <div class="field">
+                <label>하루 목표</label>
+                <input value="180분" />
+              </div>
+              <div class="field">
+                <label>휴식 주기</label>
+                <input value="50분" />
+              </div>
+              <div class="field">
+                <label>휴식 시간</label>
+                <input value="10분" />
+              </div>
+            </div>
+            <div style="height: 14px"></div>
+            <div class="section-title"><span>목표 달성률</span><span>62%</span></div>
+            <div class="progress"><div class="bar" style="width:62%"></div></div>
+          </div>
+        </article>
+
+        <article class="window">
+          <div class="window-title">
+            <span>색상 시스템</span>
+            <div class="dots"><span class="dot"></span><span class="dot"></span><span class="dot"></span></div>
+          </div>
+          <div class="content">
+            <table class="color-table">
+              <tr><th>상태</th><th>색상</th><th>적용 위치</th></tr>
+              <tr><td>집중</td><td><span class="swatch" style="background:#10B981"></span>#10B981</td><td>뱃지, 게이지</td></tr>
+              <tr><td>주의</td><td><span class="swatch" style="background:#F59E0B"></span>#F59E0B</td><td>게이지 중간</td></tr>
+              <tr><td>경고</td><td><span class="swatch" style="background:#EF4444"></span>#EF4444</td><td>팝업 테두리</td></tr>
+              <tr><td>딴짓</td><td><span class="swatch" style="background:#F97316"></span>#F97316</td><td>상태 뱃지</td></tr>
+              <tr><td>졸음</td><td><span class="swatch" style="background:#8B5CF6"></span>#8B5CF6</td><td>EAR 경고</td></tr>
+            </table>
+          </div>
+        </article>
+      </div>
+
+      <div class="stack">
+        <article class="window">
+          <div class="window-title">
+            <span>메인 화면</span>
+            <div class="dots"><span class="dot"></span><span class="dot"></span><span class="dot"></span></div>
+          </div>
+          <div class="content main-layout">
+            <section class="video-panel">
+              <div class="toolbar">
+                <div>
+                  <div class="timer">01:24:38</div>
+                  <div style="font-size:12px;color:#667085;font-weight:700;">오늘 목표 3시간 중 1시간 52분 집중</div>
+                </div>
+                <span class="badge focus">집중</span>
+              </div>
+
+              <div class="camera">
+                <div class="camera-grid"></div>
+                <div class="angle-chip">
+                  목 각도 17.4°<br />
+                  EAR 0.31<br />
+                  어깨 기울기 2.1°
+                </div>
+                <div class="silhouette">
+                  <div class="head"></div>
+                  <div class="body"></div>
+                  <span class="landmark lm1"></span>
+                  <span class="landmark lm2"></span>
+                  <span class="landmark lm3"></span>
+                  <span class="landmark lm4"></span>
+                  <span class="landmark lm5"></span>
+                  <span class="landmark lm6"></span>
+                  <span class="landmark lm7"></span>
+                  <span class="overlay-line line-neck"></span>
+                  <span class="overlay-line line-shoulder"></span>
+                  <span class="overlay-line line-left"></span>
+                  <span class="overlay-line line-right"></span>
+                </div>
+              </div>
+
+              <div class="camera-footer">
+                <div class="metric"><span>집중도</span><strong>84</strong></div>
+                <div class="metric"><span>상태</span><strong>정상</strong></div>
+                <div class="metric"><span>경고 횟수</span><strong>2</strong></div>
+                <div class="metric"><span>목표 달성</span><strong>62%</strong></div>
+              </div>
+            </section>
+
+            <aside class="side-panel">
+              <section class="panel-section">
+                <div class="section-title"><span>집중도 게이지</span><span>84점</span></div>
+                <div class="progress"><div class="bar" style="width:84%"></div></div>
+                <div class="goal-row"><span>휴식 권장까지</span><strong>12분</strong></div>
+                <div class="goal-row"><span>과집중 알림까지</span><strong>38분</strong></div>
+              </section>
+
+              <section class="panel-section alert">
+                <h3>자세 경고</h3>
+                <p>목 각도가 기준 자세보다 높게 유지되고 있습니다. 화면 중앙에 얼굴과 어깨가 들어오도록 자세를 조정해주세요.</p>
+                <ul class="stretch-list">
+                  <li>턱을 가볍게 당기고 목 뒤를 길게 세우기</li>
+                  <li>어깨를 뒤로 10회 천천히 돌리기</li>
+                  <li>20초 동안 먼 곳을 보며 눈 휴식하기</li>
+                </ul>
+              </section>
+
+              <section class="panel-section">
+                <div class="section-title"><span>상태 뱃지</span><span>실시간</span></div>
+                <div style="display:flex;flex-wrap:wrap;gap:8px;">
+                  <span class="badge focus">집중</span>
+                  <span class="badge warn">주의</span>
+                  <span class="badge bad">경고</span>
+                  <span class="badge away">딴짓</span>
+                  <span class="badge sleep">졸음</span>
+                </div>
+              </section>
+            </aside>
+          </div>
+        </article>
+
+        <article class="window">
+          <div class="window-title">
+            <span>통계 대시보드</span>
+            <div class="dots"><span class="dot"></span><span class="dot"></span><span class="dot"></span></div>
+          </div>
+          <div class="content">
+            <div class="camera-footer">
+              <div class="metric"><span>오늘 집중</span><strong>112분</strong></div>
+              <div class="metric"><span>오늘 휴식</span><strong>18분</strong></div>
+              <div class="metric"><span>평균 집중도</span><strong>78</strong></div>
+              <div class="metric"><span>경고 횟수</span><strong>2</strong></div>
+            </div>
+            <div style="height: 14px"></div>
+            <div class="chart" aria-label="시간대별 집중도 그래프">
+              <div class="chart-bar" style="height:42%"></div>
+              <div class="chart-bar" style="height:76%"></div>
+              <div class="chart-bar" style="height:68%"></div>
+              <div class="chart-bar" style="height:52%"></div>
+              <div class="chart-bar" style="height:83%"></div>
+              <div class="chart-bar" style="height:60%"></div>
+              <div class="chart-bar" style="height:74%"></div>
+            </div>
+          </div>
+        </article>
+
+        <article class="window">
+          <div class="window-title">
+            <span>라벨링 화면</span>
+            <div class="dots"><span class="dot"></span><span class="dot"></span><span class="dot"></span></div>
+          </div>
+          <div class="content">
+            <div class="label-grid">
+              <div class="label-button" style="background:#10B981;">집중<small>128 samples</small></div>
+              <div class="label-button" style="background:#F97316;">딴짓<small>42 samples</small></div>
+              <div class="label-button" style="background:#8B5CF6;">졸음<small>31 samples</small></div>
+            </div>
+          </div>
+        </article>
+      </div>
+    </section>
+  </main>
+</body>
+</html>
