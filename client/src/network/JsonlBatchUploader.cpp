@@ -20,15 +20,10 @@ void JsonlBatchUploader::append_event_metadata(const PostureEvent& event)
     lines_.push_back(to_jsonl(event));
 }
 
-void JsonlBatchUploader::append_event_metadata(const PostureEvent& event, const std::string& clip_ref)
+void JsonlBatchUploader::append_event_metadata(const PostureEvent& event, const ClipRef& clip_ref)
 {
     std::lock_guard<std::mutex> lock(mtx_);
-    std::string line = to_jsonl(event);
-    if (!clip_ref.empty() && line.size() >= 1 && line.back() == '}') {
-        line.pop_back();
-        line += ",\"clip_ref\":\"" + escape_json(clip_ref) + "\"}";
-    }
-    lines_.push_back(std::move(line));
+    lines_.push_back(to_jsonl(event, clip_ref));
 }
 
 std::string JsonlBatchUploader::drain_jsonl()
@@ -94,6 +89,24 @@ std::string JsonlBatchUploader::to_jsonl(const PostureEvent& event)
         << ",\"timestamp_ms\":" << event.timestamp_ms
         << ",\"reason\":\"" << escape_json(event.reason) << "\""
         << ",\"frame_count\":" << event.frames.size()
+        << "}";
+    return out.str();
+}
+
+std::string JsonlBatchUploader::to_jsonl(const PostureEvent& event, const ClipRef& clip_ref)
+{
+    std::ostringstream out;
+    out << "{\"kind\":\"event\""
+        << ",\"timestamp_ms\":" << event.timestamp_ms
+        << ",\"reason\":\"" << escape_json(event.reason) << "\""
+        << ",\"frame_count\":" << clip_ref.frame_count
+        << ",\"clip_id\":\"" << escape_json(clip_ref.clip_id) << "\""
+        << ",\"clip_ref\":\"" << escape_json(clip_ref.uri) << "\""
+        << ",\"clip_access\":\"" << escape_json(clip_ref.access_kind) << "\""
+        << ",\"clip_format\":\"" << escape_json(clip_ref.format) << "\""
+        << ",\"retention_days\":" << clip_ref.retention_days
+        << ",\"created_at_ms\":" << clip_ref.created_at_ms
+        << ",\"expires_at_ms\":" << clip_ref.expires_at_ms
         << "}";
     return out.str();
 }

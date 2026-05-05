@@ -10,6 +10,7 @@ ClientTransportConfig make_transport_config(
     std::string clip_directory,
     int frame_sample_interval,
     int jpeg_quality,
+    std::uint32_t local_clip_retention_days,
     std::size_t jsonl_flush_threshold)
 {
     ClientTransportConfig config;
@@ -22,6 +23,7 @@ ClientTransportConfig make_transport_config(
     config.clip_directory = std::move(clip_directory);
     config.frame_sample_interval = frame_sample_interval;
     config.jpeg_quality = jpeg_quality;
+    config.local_clip_retention_days = local_clip_retention_days;
     config.jsonl_flush_threshold = jsonl_flush_threshold;
     return config;
 }

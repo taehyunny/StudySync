@@ -25,12 +25,16 @@ add_executable(StudySyncClient WIN32
     src/render/OverlayPainter.cpp
     src/network/ZmqSendThread.cpp
     src/network/ZmqRecvThread.cpp
+    src/network/ConnectionState.cpp
     src/network/EventUploadThread.cpp
+    src/network/HeartbeatClient.cpp
     src/network/ClientTransportConfig.cpp
     src/network/ClientTransportFactory.cpp
     src/network/HttpJsonlLogSink.cpp
     src/network/JsonlBatchUploader.cpp
     src/network/LocalClaimCheckClipStore.cpp
+    src/network/LocalClipGarbageCollector.cpp
+    src/network/ReconnectPolicy.cpp
     src/network/ZmqFrameSender.cpp
     src/alert/AlertManager.cpp
     src/alert/AlertDispatchThread.cpp

@@ -48,6 +48,6 @@ void EventUploadThread::run()
 void EventUploadThread::upload_event(const PostureEvent& event)
 {
     const ClipRef clip_ref = clip_store_.store_clip(event);
-    log_sink_.append_event_metadata(event, clip_ref.uri);
+    log_sink_.append_event_metadata(event, clip_ref);
     log_sink_.flush();
 }

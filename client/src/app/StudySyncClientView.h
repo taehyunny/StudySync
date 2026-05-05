@@ -11,6 +11,8 @@
 #include "network/EventUploadThread.h"
 #include "network/ClientTransportConfig.h"
 #include "network/ClientTransportFactory.h"
+#include "network/HeartbeatClient.h"
+#include "network/LocalClipGarbageCollector.h"
 #include "render/RenderThread.h"
 
 class CStudySyncClientView : public CWnd
@@ -43,4 +45,7 @@ private:
     ZmqRecvThread                    zmq_recv_thread_;
     EventUploadThread                event_upload_thread_;
     AlertDispatchThread              alert_dispatch_thread_;
+    HeartbeatClient                  ai_heartbeat_;
+    HeartbeatClient                  main_heartbeat_;
+    LocalClipGarbageCollector        clip_garbage_collector_;
 };
