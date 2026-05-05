@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstddef>
+#include <cstdint>
 #include <string>
 
 enum class FrameTransportKind {
@@ -28,6 +29,7 @@ struct ClientTransportConfig {
 
     int frame_sample_interval = 6;
     int jpeg_quality = 80;
+    std::uint32_t local_clip_retention_days = 3;
     std::size_t jsonl_flush_threshold = 30;
 };
 
@@ -38,4 +40,5 @@ ClientTransportConfig make_transport_config(
     std::string clip_directory,
     int frame_sample_interval = 6,
     int jpeg_quality = 80,
+    std::uint32_t local_clip_retention_days = 3,
     std::size_t jsonl_flush_threshold = 30);

@@ -23,10 +23,11 @@ ClientTransports make_client_transports(const ClientTransportConfig& config)
 
     switch (config.clip_store) {
     case ClipStoreKind::LocalClaimCheck:
-        transports.clip_store = std::make_unique<LocalClaimCheckClipStore>(config.clip_directory);
+        transports.clip_store = std::make_unique<LocalClaimCheckClipStore>(
+            config.clip_directory,
+            config.local_clip_retention_days);
         break;
     }
 
     return transports;
 }
-

@@ -24,6 +24,9 @@ CStudySyncClientView::CStudySyncClientView()
     , zmq_recv_thread_(shadow_buffer_, event_queue_)
     , event_upload_thread_(event_queue_, *transports_.clip_store, *transports_.log_sink)
     , alert_dispatch_thread_(alert_queue_)
+    , ai_heartbeat_("AI Server", transport_config_.zmq_push_endpoint)
+    , main_heartbeat_("Main Server", transport_config_.jsonl_ingest_url)
+    , clip_garbage_collector_(transport_config_.clip_directory, transport_config_.local_clip_retention_days)
 {
 }
 
@@ -43,12 +46,22 @@ int CStudySyncClientView::OnCreate(LPCREATESTRUCT lpCreateStruct)
     zmq_send_thread_.start(transport_config_.frame_sample_interval);
     event_upload_thread_.start();
     alert_dispatch_thread_.start();
+    ai_heartbeat_.start([this] {
+        return transports_.frame_sender && transports_.frame_sender->health_check();
+    });
+    main_heartbeat_.start([this] {
+        return transports_.log_sink && transports_.log_sink->health_check();
+    });
+    clip_garbage_collector_.start();
 
     return 0;
 }
 
 void CStudySyncClientView::OnDestroy()
 {
+    clip_garbage_collector_.stop();
+    main_heartbeat_.stop();
+    ai_heartbeat_.stop();
     alert_dispatch_thread_.stop();
     event_upload_thread_.stop();
     zmq_recv_thread_.stop();
