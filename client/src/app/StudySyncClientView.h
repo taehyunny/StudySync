@@ -18,7 +18,9 @@
 #include "network/SessionApi.h"
 #include "render/RenderThread.h"
 
+#include <mutex>
 #include <string>
+#include <vector>
 
 class CStudySyncClientView : public CWnd
 {
@@ -35,7 +37,21 @@ protected:
     afx_msg void OnPaint();
     afx_msg BOOL OnEraseBkgnd(CDC* pDC);
     afx_msg void OnSize(UINT nType, int cx, int cy);
+    afx_msg void OnTimer(UINT_PTR nIDEvent);
     DECLARE_MESSAGE_MAP()
+
+    // ── 캘리브레이션 ──────────────────────────────────────────────
+    static constexpr UINT_PTR IDT_CALIB      = 1;  // 1초 카운트다운 타이머
+    static constexpr UINT_PTR IDT_CALIB_HIDE = 2;  // 완료 후 1.5초 뒤 오버레이 숨김
+    static constexpr UINT_PTR IDT_LOG_FLUSH  = 3;  // 분석 데이터 주기적 서버 전송
+
+    void begin_calibration();
+    void finish_calibration();
+
+    std::mutex              calib_mtx_;
+    std::vector<double>     calib_samples_;
+    bool                    calibrating_    = false;
+    int                     calib_tick_     = 0;    // 남은 초
 
 private:
     CaptureThread::RenderFrameBuffer render_buffer_;

@@ -21,6 +21,7 @@ public:
     // 세션 시작 이후 set_session_start_ms / set_toast_buffer 호출 (렌더 스레드 안전)
     void set_session_start_ms(std::uint64_t ms)  { overlay_.set_session_start_ms(ms); }
     void set_toast_buffer(ToastBuffer* tb)        { overlay_.set_toast_buffer(tb); }
+    void set_calibration_countdown(int sec)       { overlay_.set_calibration_countdown(sec); }
 
 private:
     bool recreate_target();

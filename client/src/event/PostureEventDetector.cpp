@@ -10,8 +10,8 @@ void PostureEventDetector::set_callback(EventCallback cb)
 
 void PostureEventDetector::feed(const AnalysisResult& result, const EventShadowBuffer& shadow)
 {
-    bad_posture_streak_ = (result.neck_angle > 25.0 || !result.posture_ok) ? bad_posture_streak_ + 1 : 0;
-    drowsy_streak_ = (result.ear < 0.25 || result.drowsy) ? drowsy_streak_ + 1 : 0;
+    bad_posture_streak_ = (result.neck_angle > neck_threshold_ || !result.posture_ok) ? bad_posture_streak_ + 1 : 0;
+    drowsy_streak_ = (result.ear < ear_threshold_ || result.drowsy) ? drowsy_streak_ + 1 : 0;
 
     if (event_cooldown_) {
         if (bad_posture_streak_ == 0 && drowsy_streak_ == 0) {

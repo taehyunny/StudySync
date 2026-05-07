@@ -108,13 +108,29 @@ HttpResponse WinHttpClient::send_request(
         token_copy = token_;
     }
 
+    DWORD flags = parts.https ? WINHTTP_FLAG_SECURE : 0;
+
+    // 방어: path에 절대 URL이 넘어왔다면 path 부분만 추출
+    // 예) "http://10.10.10.130:8081/log/ingest" → "/log/ingest"
+    std::string clean_path = path;
+    {
+        const auto http_pos = clean_path.find("://");
+        if (http_pos != std::string::npos) {
+            const auto slash_pos = clean_path.find('/', http_pos + 3);
+            clean_path = (slash_pos != std::string::npos)
+                         ? clean_path.substr(slash_pos)
+                         : "/";
+        }
+    }
+    std::wstring wide_path = to_wide(clean_path);
+
     // 연결 대상 디버그 출력 (요청이 어디로 가는지 확인용)
     {
         char dbg[256];
         std::string host_utf8 = to_utf8(parts.host.c_str(), static_cast<int>(parts.host.size()));
         snprintf(dbg, sizeof(dbg),
             "[WinHttp] -> %s:%d%s\n",
-            host_utf8.c_str(), parts.port, path.c_str());
+            host_utf8.c_str(), parts.port, clean_path.c_str());
         OutputDebugStringA(dbg);
     }
 
@@ -122,15 +138,13 @@ HttpResponse WinHttpClient::send_request(
         session_, parts.host.c_str(), parts.port, 0);
     if (!connect) {
         char dbg[256];
+        std::string host_utf8 = to_utf8(parts.host.c_str(), static_cast<int>(parts.host.size()));
         snprintf(dbg, sizeof(dbg),
             "[WinHttp] Connect FAILED  host=%s  port=%d  err=0x%08X\n",
-            path.c_str(), parts.port, static_cast<unsigned>(GetLastError()));
+            host_utf8.c_str(), parts.port, static_cast<unsigned>(GetLastError()));
         OutputDebugStringA(dbg);
         return resp;
     }
-
-    DWORD flags = parts.https ? WINHTTP_FLAG_SECURE : 0;
-    std::wstring wide_path = to_wide(path);
 
     HINTERNET request = WinHttpOpenRequest(
         connect, verb, wide_path.c_str(),

@@ -51,9 +51,13 @@ void OverlayPainter::release_resources()
     brush_bar_bg_.Reset();
     brush_toast_bg_.Reset();
     brush_timer_bg_.Reset();
+    brush_calib_bg_.Reset();
+    brush_calib_panel_.Reset();
     fmt_label_.Reset();
     fmt_value_.Reset();
     fmt_score_.Reset();
+    fmt_calib_count_.Reset();
+    fmt_calib_msg_.Reset();
 }
 
 bool OverlayPainter::ensure_resources(ID2D1RenderTarget* rt)
@@ -111,6 +115,28 @@ bool OverlayPainter::ensure_resources(ID2D1RenderTarget* rt)
     if (FAILED(rt->CreateSolidColorBrush(D2D1::ColorF(0.22f, 0.22f, 0.22f), brush_bar_bg_.GetAddressOf()))) return false;
     if (FAILED(rt->CreateSolidColorBrush(D2D1::ColorF(0.70f, 0.12f, 0.12f, 0.88f), brush_toast_bg_.GetAddressOf()))) return false;
     if (FAILED(rt->CreateSolidColorBrush(D2D1::ColorF(0.0f,  0.0f,  0.0f,  0.60f), brush_timer_bg_.GetAddressOf()))) return false;
+    if (FAILED(rt->CreateSolidColorBrush(D2D1::ColorF(0.0f,  0.0f,  0.0f,  0.55f), brush_calib_bg_.GetAddressOf()))) return false;
+    if (FAILED(rt->CreateSolidColorBrush(D2D1::ColorF(0.08f, 0.12f, 0.20f, 0.92f), brush_calib_panel_.GetAddressOf()))) return false;
+
+    // 캘리브레이션 큰 카운트다운 숫자 (80pt bold)
+    dwrite_->CreateTextFormat(font, nullptr,
+                              DWRITE_FONT_WEIGHT_BOLD,
+                              DWRITE_FONT_STYLE_NORMAL,
+                              DWRITE_FONT_STRETCH_NORMAL,
+                              80.0f,
+                              L"en-US",
+                              fmt_calib_count_.GetAddressOf());
+    if (fmt_calib_count_) fmt_calib_count_->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_CENTER);
+
+    // 캘리브레이션 안내 메시지 (16pt)
+    dwrite_->CreateTextFormat(font, nullptr,
+                              DWRITE_FONT_WEIGHT_SEMI_BOLD,
+                              DWRITE_FONT_STYLE_NORMAL,
+                              DWRITE_FONT_STRETCH_NORMAL,
+                              16.0f,
+                              L"en-US",
+                              fmt_calib_msg_.GetAddressOf());
+    if (fmt_calib_msg_) fmt_calib_msg_->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_CENTER);
 
     initialized_ = true;
     return true;
@@ -136,6 +162,15 @@ void OverlayPainter::draw(ID2D1RenderTarget* rt, const AnalysisResult& result)
         std::string toast_text;
         if (toast_buffer_->get_active(toast_text)) {
             draw_toast(rt, kLeft, next_y, toast_text);
+        }
+    }
+
+    // ── 캘리브레이션 오버레이 (활성 시 최우선 표시) ──────────────
+    {
+        const int calib = calib_countdown_.load();
+        if (calib >= 0) {
+            draw_calibration(rt, calib);
+            return;  // 캘리브레이션 중에는 분석 패널 숨김
         }
     }
 
@@ -299,6 +334,62 @@ void OverlayPainter::draw_timer(ID2D1RenderTarget* rt, float x, float y)
     rt->FillRoundedRectangle(bg, brush_timer_bg_.Get());
 
     draw_text(rt, buf, x + 8.0f, y + 5.0f, kW - 10.0f, kH, fmt_value_.Get(), brush_white_.Get());
+}
+
+void OverlayPainter::draw_calibration(ID2D1RenderTarget* rt, int countdown)
+{
+    if (!fmt_calib_count_ || !fmt_calib_msg_) return;
+
+    const D2D1_SIZE_F size = rt->GetSize();
+    const float cx = size.width  * 0.5f;
+    const float cy = size.height * 0.5f;
+
+    // 반투명 전체 화면 덮기
+    rt->FillRectangle(D2D1::RectF(0, 0, size.width, size.height), brush_calib_bg_.Get());
+
+    // 중앙 패널 (360 x 260)
+    constexpr float kPW = 360.0f;
+    constexpr float kPH = 260.0f;
+    const D2D1_ROUNDED_RECT panel = D2D1::RoundedRect(
+        D2D1::RectF(cx - kPW * 0.5f, cy - kPH * 0.5f, cx + kPW * 0.5f, cy + kPH * 0.5f),
+        14.0f, 14.0f);
+    rt->FillRoundedRectangle(panel, brush_calib_panel_.Get());
+    rt->DrawRoundedRectangle(panel, brush_gray_.Get(), 1.0f);
+
+    if (countdown > 0) {
+        // 상단 안내 문구
+        draw_text(rt, L"Sit in your study posture",
+                  cx - kPW * 0.5f, cy - kPH * 0.5f + 22.0f,
+                  kPW, 22.0f, fmt_calib_msg_.Get(), brush_gray_.Get());
+        draw_text(rt, L"This will be your baseline",
+                  cx - kPW * 0.5f, cy - kPH * 0.5f + 48.0f,
+                  kPW, 22.0f, fmt_calib_msg_.Get(), brush_gray_.Get());
+
+        // 큰 카운트다운 숫자
+        wchar_t num[4]{};
+        swprintf_s(num, L"%d", countdown);
+        rt->DrawText(num,
+                     static_cast<UINT32>(wcslen(num)),
+                     fmt_calib_count_.Get(),
+                     D2D1::RectF(cx - 60.0f, cy - 60.0f, cx + 60.0f, cy + 60.0f),
+                     brush_white_.Get());
+
+        // 하단 보조 설명
+        draw_text(rt, L"Calibrating your posture...",
+                  cx - kPW * 0.5f, cy + kPH * 0.5f - 44.0f,
+                  kPW, 20.0f, fmt_calib_msg_.Get(), brush_gray_.Get());
+    } else {
+        // countdown == 0 → 완료 메시지
+        draw_text(rt, L"Calibration complete!",
+                  cx - kPW * 0.5f, cy - 60.0f,
+                  kPW, 24.0f, fmt_calib_msg_.Get(), brush_green_.Get());
+        draw_text(rt, L"Your posture baseline has been set.",
+                  cx - kPW * 0.5f, cy - 28.0f,
+                  kPW, 20.0f, fmt_calib_msg_.Get(), brush_gray_.Get());
+        draw_text(rt, L"Starting session...",
+                  cx - kPW * 0.5f, cy + 8.0f,
+                  kPW, 20.0f, fmt_calib_msg_.Get(), brush_gray_.Get());
+    }
 }
 
 void OverlayPainter::draw_toast(ID2D1RenderTarget* rt, float x, float y, const std::string& text)
