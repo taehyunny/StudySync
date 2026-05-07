@@ -1,6 +1,8 @@
 #include "pch.h"
 #include "event/PostureEventDetector.h"
 
+#include <chrono>
+
 void PostureEventDetector::set_callback(EventCallback cb)
 {
     callback_ = std::move(cb);
@@ -43,9 +45,14 @@ void PostureEventDetector::emit_event(PostureEventType type, const char* reason,
 
     PostureEvent event;
     event.type = type;
-    event.timestamp_ms = result.timestamp_ms;
-    event.reason = reason;
-    event.frames = shadow.snapshot(30);
+    event.timestamp_ms = result.timestamp_ms > 0
+        ? result.timestamp_ms
+        : static_cast<std::uint64_t>(
+              std::chrono::duration_cast<std::chrono::milliseconds>(
+                  std::chrono::system_clock::now().time_since_epoch()).count());
+    event.event_id = "evt-" + std::to_string(event.timestamp_ms);
+    event.reason   = reason;
+    event.frames   = shadow.snapshot(30);
     callback_(std::move(event));
 }
 

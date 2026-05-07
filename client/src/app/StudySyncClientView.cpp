@@ -61,6 +61,11 @@ void CStudySyncClientView::set_session_id(long long session_id,
 {
     session_id_         = session_id;
     session_start_time_ = start_time;
+
+    // JSONL 로그 라인에 session_id 포함
+    if (transports_.log_sink) {
+        transports_.log_sink->set_session_id(session_id);
+    }
 }
 
 // ── 윈도우 메시지 ──────────────────────────────────────────────

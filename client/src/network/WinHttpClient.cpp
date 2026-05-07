@@ -57,6 +57,11 @@ HttpResponse WinHttpClient::post_json(const std::string& path, const std::string
     return send_request(L"POST", path, json_body, L"application/json");
 }
 
+HttpResponse WinHttpClient::post_ndjson(const std::string& path, const std::string& ndjson_body)
+{
+    return send_request(L"POST", path, ndjson_body, L"application/x-ndjson");
+}
+
 WinHttpClient::UrlParts WinHttpClient::parse_base_url() const
 {
     UrlParts parts;

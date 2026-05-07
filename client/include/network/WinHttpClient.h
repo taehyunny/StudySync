@@ -24,7 +24,8 @@ public:
     void clear_token();
 
     HttpResponse get(const std::string& path);
-    HttpResponse post_json(const std::string& path, const std::string& json_body);
+    HttpResponse post_json (const std::string& path, const std::string& json_body);
+    HttpResponse post_ndjson(const std::string& path, const std::string& ndjson_body);
 
 private:
     WinHttpClient(const WinHttpClient&) = delete;
