@@ -24,6 +24,10 @@ public:
     // 토스트 버퍼 연결 (렌더 스레드 시작 전 1회 호출).
     void set_toast_buffer(ToastBuffer* tb) { toast_buffer_ = tb; }
 
+    // 캘리브레이션 카운트다운 설정
+    //  5~1: 카운트다운 표시,  0: "완료!" 표시,  -1: 오버레이 숨김
+    void set_calibration_countdown(int sec) { calib_countdown_.store(sec); }
+
     // Draws the latest AI analysis result over the camera frame.
     void draw(ID2D1RenderTarget* rt, const AnalysisResult& result);
 
@@ -57,10 +61,12 @@ private:
     ID2D1SolidColorBrush* focus_bar_brush(float score) const;
     void draw_timer(ID2D1RenderTarget* rt, float x, float y);
     void draw_toast(ID2D1RenderTarget* rt, float x, float y, const std::string& text);
+    void draw_calibration(ID2D1RenderTarget* rt, int countdown);
 
-    // 세션 타이머 / 토스트
+    // 세션 타이머 / 토스트 / 캘리브레이션
     std::atomic<std::uint64_t> session_start_ms_{ 0 };
     ToastBuffer*               toast_buffer_ = nullptr;
+    std::atomic<int>           calib_countdown_{ -1 };  // -1: 숨김
 
     Microsoft::WRL::ComPtr<IDWriteFactory> dwrite_;
     Microsoft::WRL::ComPtr<IDWriteTextFormat> fmt_label_;
@@ -75,8 +81,12 @@ private:
     Microsoft::WRL::ComPtr<ID2D1SolidColorBrush> brush_orange_;
     Microsoft::WRL::ComPtr<ID2D1SolidColorBrush> brush_red_;
     Microsoft::WRL::ComPtr<ID2D1SolidColorBrush> brush_bar_bg_;
-    Microsoft::WRL::ComPtr<ID2D1SolidColorBrush> brush_toast_bg_;   // 토스트 배경
-    Microsoft::WRL::ComPtr<ID2D1SolidColorBrush> brush_timer_bg_;   // 타이머 배경
+    Microsoft::WRL::ComPtr<ID2D1SolidColorBrush> brush_toast_bg_;    // 토스트 배경
+    Microsoft::WRL::ComPtr<ID2D1SolidColorBrush> brush_timer_bg_;    // 타이머 배경
+    Microsoft::WRL::ComPtr<ID2D1SolidColorBrush> brush_calib_bg_;    // 캘리브레이션 반투명 배경
+    Microsoft::WRL::ComPtr<ID2D1SolidColorBrush> brush_calib_panel_; // 캘리브레이션 패널
+    Microsoft::WRL::ComPtr<IDWriteTextFormat>     fmt_calib_count_;   // 큰 카운트다운 숫자
+    Microsoft::WRL::ComPtr<IDWriteTextFormat>     fmt_calib_msg_;     // 안내 메시지
 
     bool initialized_ = false;
 };
