@@ -1,6 +1,6 @@
 # StudySync 클라이언트 — 구현 현황 및 잔여 작업
 
-> 최종 업데이트: 2026-05-07 (WinHttpClient post_multipart 완료)  
+> 최종 업데이트: 2026-05-07 (Stage 3 FeedbackApi 연결 완료)  
 > 브랜치: `feature/taehyun`  
 > 작성자: 정태현 (클라이언트 담당)
 
@@ -140,12 +140,15 @@ client.txt 아키텍처 명세 1단계가 모두 구현되었다.
 
 | 파일 | 내용 |
 |---|---|
-| `include/network/FeedbackApi.h` | POST /feedback 요청 래퍼 (신규) |
-| `src/network/FeedbackApi.cpp` | multipart/form-data 전송 (신규) |
+| `include/network/FeedbackApi.h` | POST /feedback 요청 래퍼 ✅ 완료 |
+| `src/network/FeedbackApi.cpp` | multipart/form-data 전송 ✅ 완료 |
 | `include/network/WinHttpClient.h` | `MultipartField` 구조체 + `post_multipart()` 선언 ✅ 완료 |
 | `src/network/WinHttpClient.cpp` | `post_multipart()` + `build_multipart_body()` 구현 ✅ 완료 |
 | `include/network/ConsentStore.h` | 동의 여부 로컬 저장 ✅ 완료 |
 | `src/network/ConsentStore.cpp` | %APPDATA%/StudySync/consent.dat ✅ 완료 |
+| `src/app/ReviewDlg.h/.cpp` | 틀렸어요 → FeedbackApi::send() 연결 ✅ 완료 |
+| `src/app/StudySyncClientView.h` | session_id() getter 추가 ✅ 완료 |
+| `src/app/MainFrm.cpp` | ReviewDlg 생성 시 session_id 전달 ✅ 완료 |
 
 **WinHTTP multipart 구현 참고**:  
 `WinHttpClient::post_multipart()` ✅ 완료 — `MultipartField` 구조체 + `build_multipart_body()` 포함.  
@@ -297,9 +300,9 @@ MediaPipe C++ SDK 확정 후 교체:
 [3단계 — 피드백 업로드]
   ✅ WinHttpClient::post_multipart() 완료
   ✅ ConsentStore (동의 여부 저장) 완료
-  ✦ FeedbackApi (POST /feedback multipart)
-  ✦ ReviewDlg → FeedbackApi 연결
-  ✦ 세션 종료 팝업 (불확실 판정 N건)
+  ✅ FeedbackApi (POST /feedback multipart) 완료
+  ✅ ReviewDlg → FeedbackApi 연결 완료
+  ✦ 세션 종료 팝업 (불확실 판정 N건) — MainFrm OnClose 구현은 완료, UI 팝업 별도 작업
 
 [AI팀 준비 후]
   ✦ use_dummy_ai = false 전환
