@@ -258,7 +258,8 @@ GoalDao::GoalInfo GoalDao::find_by_user(long long user_id) {
     if (!stmt) return info;
 
     const char* sql =
-        "SELECT daily_goal_min, rest_interval_min, rest_duration_min "
+        "SELECT daily_goal_min, rest_interval_min, rest_duration_min, "
+        "       DATE_FORMAT(updated_at, '%Y-%m-%d %H:%i:%s') "
         "FROM goals WHERE user_id=? LIMIT 1";
     if (mysql_stmt_prepare(stmt, sql, std::strlen(sql)) != 0) {
         mysql_stmt_close(stmt);
@@ -273,17 +274,21 @@ GoalDao::GoalInfo GoalDao::find_by_user(long long user_id) {
         return info;
     }
 
-    MYSQL_BIND br[3]; std::memset(br, 0, sizeof(br));
+    MYSQL_BIND br[4]; std::memset(br, 0, sizeof(br));
     int v_daily = 0, v_rest_iv = 0, v_rest_dur = 0;
+    char r_updated[32]{}; unsigned long l_updated = 0;
     bind_long(br[0], &v_daily);
     bind_long(br[1], &v_rest_iv);
     bind_long(br[2], &v_rest_dur);
+    br[3].buffer_type = MYSQL_TYPE_STRING; br[3].buffer = r_updated;
+    br[3].buffer_length = sizeof(r_updated); br[3].length = &l_updated;
 
     mysql_stmt_bind_result(stmt, br);
     if (mysql_stmt_fetch(stmt) == 0) {
         info.daily_goal_min    = v_daily;
         info.rest_interval_min = v_rest_iv;
         info.rest_duration_min = v_rest_dur;
+        info.updated_at.assign(r_updated, l_updated);
         info.found = true;
     }
     mysql_stmt_close(stmt);
@@ -493,13 +498,14 @@ SessionDao::AggregateResult SessionDao::aggregate(long long session_id) {
     MYSQL_STMT* stmt = mysql_stmt_init(conn);
     if (!stmt) return r;
 
-    // TODO(spec): focus_min 정의 미정. 잠정: state='집중' 행 수 × 0.2초 / 60.
+    // 합의: state 값은 영어 'focus'/'distracted'/'drowsy' (ai_client_tcp_protocol.md §6).
+    // focus_min 잠정 정의: state='focus' 행 수 × 0.2초 / 60 (5fps 가정).
     // AVG(focus_score) 는 0~100 → /100 으로 0~1 변환은 호출자가 처리.
     const char* sql =
         "SELECT "
         "  COUNT(*) AS sample_count,"
         "  AVG(focus_score) AS avg_score,"
-        "  SUM(CASE WHEN state = '집중' THEN 1 ELSE 0 END) AS focused_rows "
+        "  SUM(CASE WHEN state = 'focus' THEN 1 ELSE 0 END) AS focused_rows "
         "FROM focus_logs WHERE session_id=?";
     if (mysql_stmt_prepare(stmt, sql, std::strlen(sql)) != 0) {
         log_err_db("SessionDao aggregate prepare 실패 | %s", mysql_stmt_error(stmt));
@@ -995,7 +1001,7 @@ StatsDao::TodayStats StatsDao::get_today(long long user_id, int daily_goal_min) 
     // TODO(spec): warning_count 정의 = posture_logs(posture_ok=0) 카운트로 잠정.
     const char* sql =
         "SELECT "
-        "  COALESCE(SUM(CASE WHEN fl.state='집중' THEN 1 ELSE 0 END),0) AS focused_rows,"
+        "  COALESCE(SUM(CASE WHEN fl.state='focus' THEN 1 ELSE 0 END),0) AS focused_rows,"
         "  COALESCE(AVG(fl.focus_score),0)                              AS avg_score,"
         "  ("
         "    SELECT COUNT(*) FROM posture_logs pl "

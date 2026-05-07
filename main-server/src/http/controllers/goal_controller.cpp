@@ -60,9 +60,9 @@ void GoalController::register_routes() {
             {"daily_goal_min",    info.daily_goal_min},
             {"rest_interval_min", info.rest_interval_min},
             {"rest_duration_min", info.rest_duration_min},
-            // TODO(spec): updated_at 클라가 ISO8601 기대 — DAO 에 컬럼 추가 필요.
-            //   잠정으로 빈 문자열 반환.
-            {"updated_at",        ""}
+            // DB 의 MySQL DATETIME ("2026-05-07 09:17:06") 그대로 반환.
+            // 클라가 ISO8601 원하면 'T' + 타임존 후처리 가능.
+            {"updated_at",        info.updated_at}
         });
     });
 }
