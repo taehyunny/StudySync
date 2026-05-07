@@ -41,15 +41,18 @@ public:
         long long   id            = 0;
         std::string email;
         std::string name;
+        std::string role;             // "user" 등 — JWT role claim 용
         std::string password_hash;
         bool        found         = false;
     };
 
     /// 회원가입. 평문 password 는 내부에서 bcrypt 해시로 변환.
+    /// role 미지정 시 'user' (스키마 DEFAULT).
     /// 성공 시 신규 user_id, 실패 시 -1 (이메일 중복 포함).
     long long insert(const std::string& email,
                      const std::string& password,
-                     const std::string& name);
+                     const std::string& name,
+                     const std::string& role = "user");
 
     /// email 로 사용자 조회.
     UserInfo find_by_email(const std::string& email);
@@ -123,6 +126,17 @@ public:
     long long find_active(long long user_id);
 
     SessionInfo find_by_id(long long session_id);
+
+    // 세션 종료 시 집계용 헬퍼 — focus_logs 에서 평균/지속 시간 산출.
+    // TODO(spec): focus_min 의 정확한 정의(집중 상태 분 vs 전체 분) 미정.
+    //   잠정: focus_min = COUNT(state='집중') * 0.2초 / 60.
+    //         avg_focus = AVG(focus_score) / 100  (0~1 비율).
+    struct AggregateResult {
+        double focus_min = 0.0;      // "집중" 으로 분류된 시간 (분)
+        double avg_focus = 0.0;      // 0~1 비율
+        long long sample_count = 0;  // focus_logs 행 수 (참고용)
+    };
+    AggregateResult aggregate(long long session_id);
 
 private:
     ConnectionPool& pool_;
@@ -264,6 +278,48 @@ public:
 
     /// 특정 model_type 의 활성 모델 (없으면 found=false).
     ModelInfo get_active(const std::string& model_type);
+
+private:
+    ConnectionPool& pool_;
+};
+
+// ── StatsDao — 통계 집계 (focus_logs / posture_logs / sessions 종합) ──
+// 클라 스펙 §3-7 ~ §3-10 응답을 만들기 위한 집계 SQL 모음.
+//
+// TODO(spec) 다수: 정확한 의미 미정 항목들은 잠정 구현 + 주석으로 표시.
+//   - warning_count: 잠정 = posture_logs(posture_ok=0) 의 일별 카운트
+//   - focus_min: 잠정 = COUNT(state='집중') * 0.2초 / 60
+//   - avg_focus_duration: 잠정 = 세션당 focus_min 평균 (분)
+//   - best_hour: 잠정 = 오늘 hour 별 AVG(focus_score) 최대 시간
+//   - weekly_avg: 잠정 = 최근 7일 평균 focus_score / 100
+class StatsDao {
+public:
+    explicit StatsDao(ConnectionPool& pool) : pool_(pool) {}
+
+    // GET /stats/today — 오늘 누적
+    struct TodayStats {
+        double focus_min     = 0.0;   // 분
+        double avg_focus     = 0.0;   // 0~1
+        long long warning_count = 0;
+        double goal_progress = 0.0;   // focus_min / daily_goal_min (0~1+)
+    };
+    TodayStats get_today(long long user_id, int daily_goal_min);
+
+    // GET /stats/hourly?date=YYYY-MM-DD
+    struct HourBucket { int hour; double avg_focus; };
+    std::vector<HourBucket> get_hourly(long long user_id, const std::string& date);
+
+    // GET /stats/pattern
+    struct PatternStats {
+        double avg_focus_duration = 0.0;  // 분
+        int    best_hour          = -1;    // 0~23, 데이터 없으면 -1
+        double weekly_avg         = 0.0;   // 0~1
+    };
+    PatternStats get_pattern(long long user_id);
+
+    // GET /stats/weekly — 최근 7일
+    struct DayBucket { std::string date; double focus_min; double avg_focus; };
+    std::vector<DayBucket> get_weekly(long long user_id);
 
 private:
     ConnectionPool& pool_;

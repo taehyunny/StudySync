@@ -30,7 +30,17 @@
 #include <ctime>       // std::time, std::tm, localtime_r, strftime (시간 함수)
 #include <mutex>       // std::mutex, lock_guard (스레드 동기화)
 #include <string>      // std::string (동적 문자열)
+#include <memory>      // std::shared_ptr (spdlog 핸들 보유)
 #include <sys/stat.h>  // mkdir (디렉터리 생성 POSIX API)
+
+// ── spdlog 추가 백엔드 ──
+// 기존 stdout / logs/YYYY-MM-DD.log 출력은 그대로 유지하면서, spdlog 가
+// 별도 sink (에러 전용 / 사이즈 회전 백업) 로 같은 메시지를 추가 처리한다.
+// async logger 라 디스크 I/O 가 핸들러를 블로킹하지 않음.
+#include <spdlog/spdlog.h>
+#include <spdlog/async.h>
+#include <spdlog/sinks/daily_file_sink.h>
+#include <spdlog/sinks/rotating_file_sink.h>
 
 // ── 파일 로거 — 날짜별 로테이션 ──
 // logs/YYYY-MM-DD.log 파일에 stdout과 동일한 내용을 tee한다.
@@ -85,36 +95,87 @@ inline void log_file_write(const char* prefix, const char* tag, const char* fmt,
     std::fflush(f);                           // 버퍼 즉시 디스크로 flush (크래시 직전 로그도 보존)
 }
 
-// ── 공통 출력 ──
-// stdout과 파일에 동시에 로그 쓰기 (tee 패턴)
-inline void log_impl(const char* emoji, const char* tag, const char* fmt, va_list args) {
-    // 파일용 복사본 생성 (va_list는 한 번 소비되면 재사용 불가)
-    va_list args_copy;
-    va_copy(args_copy, args);                 // args를 args_copy로 안전하게 복사 (C99+ 표준)
+// ── spdlog extra logger ──
+// 첫 호출 시 lazy init. async + 다음 sink:
+//   1) logs/error.log         — warn 이상만 (운영 시 tail -f 용)
+//   2) logs/main-rotating.log — 50MB × 5 회전 백업 (자체 일자별 파일과 별개)
+// 기존 stdout / logs/YYYY-MM-DD.log 흐름은 손대지 않으므로, 이 sink 들이
+// 실패해도 터미널/주 로그는 정상 동작.
+inline std::shared_ptr<spdlog::logger>& spd_extra() {
+    static std::shared_ptr<spdlog::logger> lg = []{
+        // logs/ 디렉토리 보장 — log_file_get 이 보통 먼저 만들지만 안전장치.
+        ::mkdir("logs", 0755);
 
-    // ── stdout 출력 ──
-    fprintf(stdout, "%s [%-5s] ", emoji, tag);  // 이모지 + 태그 (5자 고정폭) + 공백
-    vfprintf(stdout, fmt, args);              // 가변 인자 포맷 적용하여 메시지 출력
-    fprintf(stdout, "\n");                    // 줄바꿈
-    fflush(stdout);                           // 즉시 화면에 표시 (버퍼링 방지)
+        spdlog::init_thread_pool(8192, 1);  // 큐 8192, 워커 1
 
-    // ── 파일 출력 (복사본 사용) ──
-    log_file_write(emoji, tag, fmt, args_copy);
-    va_end(args_copy);                        // va_copy 사용 후 반드시 정리 (메모리 누수 방지)
+        auto err_sink = std::make_shared<spdlog::sinks::daily_file_sink_mt>(
+            "logs/error.log", 0, 0);
+        err_sink->set_level(spdlog::level::warn);
+
+        auto big_sink = std::make_shared<spdlog::sinks::rotating_file_sink_mt>(
+            "logs/main-rotating.log",
+            50ULL * 1024 * 1024,  // 50MB
+            5);                    // 백업 5개
+        big_sink->set_level(spdlog::level::trace);
+
+        auto l = std::make_shared<spdlog::async_logger>(
+            "extra",
+            spdlog::sinks_init_list{err_sink, big_sink},
+            spdlog::thread_pool(),
+            spdlog::async_overflow_policy::block);
+        l->set_pattern("[%Y-%m-%d %H:%M:%S.%e] [%^%l%$] %v");
+        l->set_level(spdlog::level::info);
+        return l;
+    }();
+    return lg;
 }
 
-// 에러 로그 — stderr + 파일에 동시 기록
-inline void log_err_impl(const char* tag, const char* fmt, va_list args) {
-    va_list args_copy;
-    va_copy(args_copy, args);                 // 파일 출력용 복사본
+// ── 공통 출력 ──
+// stdout, 자체 일자별 파일, spdlog extra sink 의 3곳에 같은 메시지 fan-out.
+inline void log_impl(const char* emoji, const char* tag, const char* fmt, va_list args) {
+    // va_list 는 1회 소비 → 사용처마다 별도 va_copy 필요.
+    va_list args_for_file, args_for_spd;
+    va_copy(args_for_file, args);
+    va_copy(args_for_spd,  args);
 
-    fprintf(stderr, "❌ [%-5s] ", tag);       // stderr에 ❌ 이모지 + 태그
-    vfprintf(stderr, fmt, args);              // 메시지
+    // ── ① stdout (터미널 즉시) ──
+    fprintf(stdout, "%s [%-5s] ", emoji, tag);
+    vfprintf(stdout, fmt, args);
+    fprintf(stdout, "\n");
+    fflush(stdout);
+
+    // ── ② 자체 일자별 파일 ──
+    log_file_write(emoji, tag, fmt, args_for_file);
+    va_end(args_for_file);
+
+    // ── ③ spdlog extra sink (async) ──
+    char buf[2048];
+    std::vsnprintf(buf, sizeof(buf), fmt, args_for_spd);
+    va_end(args_for_spd);
+    spd_extra()->info("{} [{:<5}] {}", emoji, tag, buf);
+}
+
+// 에러 로그 — stderr + 자체 파일 + spdlog (warn 이상이라 error.log 에도 자동 박힘)
+inline void log_err_impl(const char* tag, const char* fmt, va_list args) {
+    va_list args_for_file, args_for_spd;
+    va_copy(args_for_file, args);
+    va_copy(args_for_spd,  args);
+
+    // ── ① stderr ──
+    fprintf(stderr, "❌ [%-5s] ", tag);
+    vfprintf(stderr, fmt, args);
     fprintf(stderr, "\n");
     fflush(stderr);
 
-    log_file_write("❌", tag, fmt, args_copy);
-    va_end(args_copy);
+    // ── ② 자체 파일 ──
+    log_file_write("❌", tag, fmt, args_for_file);
+    va_end(args_for_file);
+
+    // ── ③ spdlog (error 레벨 → error.log 에 자동) ──
+    char buf[2048];
+    std::vsnprintf(buf, sizeof(buf), fmt, args_for_spd);
+    va_end(args_for_spd);
+    spd_extra()->error("❌ [{:<5}] {}", tag, buf);
 }
 
 // ============================================================================

@@ -17,6 +17,9 @@ CREATE TABLE IF NOT EXISTS users (
   email VARCHAR(255) NOT NULL,
   password_hash VARCHAR(255) NOT NULL,
   name VARCHAR(100) NOT NULL,
+  -- 클라 스펙 (client_api_jwt_spec.md §2): JWT 에 role 클레임 박기 위함.
+  -- 현재 'user' 한 종류만 허용 — 향후 'admin' 등 확장 시 CHECK 변경.
+  role VARCHAR(20) NOT NULL DEFAULT 'user',
   created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
   UNIQUE KEY uk_users_email (email)
