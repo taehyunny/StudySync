@@ -15,10 +15,15 @@ public:
     explicit SessionService(ConnectionPool& pool)
         : session_dao_(pool), goal_dao_(pool) {}
 
-    // 성공 시 신규 session_id, 실패 시 -1.
+    // 성공 시 신규 session_id, 실패 시 -1. (단순 — 미종료 세션 정리 안 함)
     long long start(long long user_id, const std::string& start_time) {
         return session_dao_.start(user_id, start_time);
     }
+
+    // 새 세션 시작 전 같은 user 의 미종료 세션을 자동 마감.
+    // 클라가 비정상 종료 후 재시작하는 시나리오 안전 처리.
+    // 컨트롤러는 이걸 호출해 자동 정리 효과 얻음.
+    long long start_with_cleanup(long long user_id, const std::string& start_time);
 
     struct EndResult {
         bool   ok            = false;

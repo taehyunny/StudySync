@@ -31,7 +31,8 @@ void SessionController::register_routes() {
             std::string start_time = body.value("start_time", "");
             if (start_time.empty()) { send_400(res, "start_time required"); return; }
 
-            long long sid = service_.start(auth.user_id, start_time);
+            // start_with_cleanup: 같은 user 의 이전 미종료 세션 자동 마감 후 새 세션 생성.
+            long long sid = service_.start_with_cleanup(auth.user_id, start_time);
             if (sid <= 0) { send_500(res, "session start failed"); return; }
 
             send_json(res, 200, { {"code", 200}, {"session_id", sid} });

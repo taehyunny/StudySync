@@ -6,6 +6,23 @@
 
 namespace factory {
 
+// SessionService::start 위 — /session/start 시 같은 user 의 미종료 세션을
+// 자동 마감해서 orphan 누적 방지.
+long long SessionService::start_with_cleanup(long long user_id,
+                                              const std::string& start_time) {
+    if (user_id <= 0 || start_time.empty()) return -1;
+
+    // 1) 기존 미종료 세션 강제 마감 (있으면)
+    int closed = session_dao_.force_close_user_open_sessions(user_id, start_time);
+    if (closed > 0) {
+        log_main("session/start: 이전 미종료 세션 %d개 자동 마감 | user=%lld",
+                 closed, user_id);
+    }
+
+    // 2) 새 세션 생성
+    return session_dao_.start(user_id, start_time);
+}
+
 SessionService::EndResult
 SessionService::end(long long user_id, long long session_id,
                     const std::string& end_time) {

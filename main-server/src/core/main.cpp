@@ -34,6 +34,7 @@
 #include "service/session_service.h"
 #include "service/stats_service.h"
 #include "service/log_service.h"
+#include "service/session_cleanup_worker.h"
 #include "storage/connection_pool.h"
 #include "monitor/health_checker.h"
 #include "http/http_server.h"
@@ -159,6 +160,13 @@ int main(int argc, char* argv[]) {
     HealthChecker health_checker(event_bus, targets);
     health_checker.start();
 
+    // 10) 미종료 세션 cron 정리기 — 클라 비정상 종료 후 매달린 sessions row 정리
+    //     기본 30분마다 깨어나 6시간 이상 stale 한 세션 강제 마감.
+    int cleanup_interval = cfg.get_int("limits.session_cleanup_interval_min", 30);
+    int cleanup_stale_hr = cfg.get_int("limits.session_stale_hours", 6);
+    SessionCleanupWorker session_cleanup(db_pool, cleanup_interval, cleanup_stale_hr);
+    session_cleanup.start();
+
     std::cout << "🔄 [MAIN ] StudySync 메인서버 시작 완료 | TCP=" << ai_port
               << " HTTP=" << http_port << " | Ctrl+C 종료" << std::endl;
 
@@ -167,6 +175,7 @@ int main(int argc, char* argv[]) {
     }
 
     std::cout << "🔄 [MAIN ] 서버 종료 중..." << std::endl;
+    session_cleanup.stop();
     health_checker.stop();
     http_server.stop();
     tcp_listener.stop();
