@@ -62,6 +62,57 @@ HttpResponse WinHttpClient::post_ndjson(const std::string& path, const std::stri
     return send_request(L"POST", path, ndjson_body, L"application/x-ndjson");
 }
 
+HttpResponse WinHttpClient::post_multipart(
+    const std::string& path,
+    const std::vector<MultipartField>& fields)
+{
+    // RFC 2046 §5.1.1 — boundary는 1~70자, 공백 금지
+    const std::string boundary = "----StudySyncBoundary7MA4YWxkTrZu0gW";
+    const std::string body     = build_multipart_body(fields, boundary);
+    const std::string ct_str   = "multipart/form-data; boundary=" + boundary;
+    const std::wstring wide_ct = to_wide(ct_str);
+    return send_request(L"POST", path, body, wide_ct.c_str());
+}
+
+// static
+std::string WinHttpClient::build_multipart_body(
+    const std::vector<MultipartField>& fields,
+    const std::string& boundary)
+{
+    const std::string crlf          = "\r\n";
+    const std::string dash_boundary = "--" + boundary;
+
+    std::string body;
+    body.reserve(4096);
+
+    for (const auto& f : fields) {
+        body += dash_boundary + crlf;
+
+        if (f.filename.empty()) {
+            // ── 텍스트 필드 ─────────────────────────────────────
+            body += "Content-Disposition: form-data; name=\"" + f.name + "\"" + crlf;
+            body += crlf;
+            body += f.value;
+            body += crlf;
+        } else {
+            // ── 파일 파트 ───────────────────────────────────────
+            body += "Content-Disposition: form-data; name=\"" + f.name
+                  + "\"; filename=\"" + f.filename + "\"" + crlf;
+            const std::string ct = f.content_type.empty()
+                                   ? "application/octet-stream"
+                                   : f.content_type;
+            body += "Content-Type: " + ct + crlf;
+            body += crlf;
+            // binary data — std::string은 null 바이트 포함 가능
+            body.append(reinterpret_cast<const char*>(f.data.data()), f.data.size());
+            body += crlf;
+        }
+    }
+
+    body += dash_boundary + "--" + crlf;   // closing boundary
+    return body;
+}
+
 WinHttpClient::UrlParts WinHttpClient::parse_base_url() const
 {
     UrlParts parts;
