@@ -157,20 +157,3 @@ std::string JsonlBatchUploader::to_jsonl(const PostureEvent& event, const ClipRe
     return out.str();
 }
 
-std::string JsonlBatchUploader::to_jsonl(const PostureEvent& event, const ClipRef& clip_ref)
-{
-    std::ostringstream out;
-    out << "{\"kind\":\"event\""
-        << ",\"timestamp_ms\":" << event.timestamp_ms
-        << ",\"reason\":\"" << escape_json(event.reason) << "\""
-        << ",\"frame_count\":" << clip_ref.frame_count
-        << ",\"clip_id\":\"" << escape_json(clip_ref.clip_id) << "\""
-        << ",\"clip_ref\":\"" << escape_json(clip_ref.uri) << "\""
-        << ",\"clip_access\":\"" << escape_json(clip_ref.access_kind) << "\""
-        << ",\"clip_format\":\"" << escape_json(clip_ref.format) << "\""
-        << ",\"retention_days\":" << clip_ref.retention_days
-        << ",\"created_at_ms\":" << clip_ref.created_at_ms
-        << ",\"expires_at_ms\":" << clip_ref.expires_at_ms
-        << "}";
-    return out.str();
-}
