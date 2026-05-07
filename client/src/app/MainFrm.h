@@ -5,7 +5,7 @@ class CStudySyncClientView;
 class CMainFrame : public CFrameWnd
 {
 public:
-    CMainFrame() noexcept;
+    explicit CMainFrame(int user_id = 0) noexcept;
     ~CMainFrame() override = default;
 
 protected:
@@ -13,6 +13,6 @@ protected:
     DECLARE_MESSAGE_MAP()
 
 private:
-    CStudySyncClientView* view_ = nullptr;
+    int                    user_id_ = 0;
+    CStudySyncClientView*  view_    = nullptr;
 };
-

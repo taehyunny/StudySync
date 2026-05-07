@@ -5,7 +5,6 @@ set(CMAKE_MFC_FLAG 2)  # Dynamic MFC (must be before project())
 project(StudySyncClient VERSION 0.1.0 LANGUAGES CXX)
 
 option(STUDYSYNC_ENABLE_LOCAL_MEDIAPIPE "Build local MediaPipe analyzer adapter" OFF)
-option(STUDYSYNC_ENABLE_ZMQ "Build ZMQ analyzer adapter" ON)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -16,6 +15,8 @@ add_executable(StudySyncClient WIN32
     src/app/StudySyncClientApp.cpp
     src/app/MainFrm.cpp
     src/app/StudySyncClientView.cpp
+    src/app/LoginDlg.cpp
+    src/app/RegisterDlg.cpp
     src/capture/CaptureThread.cpp
     src/core/WorkerThreadPool.cpp
     src/event/EventShadowBuffer.cpp
@@ -23,15 +24,21 @@ add_executable(StudySyncClient WIN32
     src/render/D2DRenderer.cpp
     src/render/RenderThread.cpp
     src/render/OverlayPainter.cpp
-    src/network/ZmqSendThread.cpp
-    src/network/ZmqRecvThread.cpp
+    src/network/ConnectionState.cpp
+    src/network/AiTcpClient.cpp
     src/network/EventUploadThread.cpp
+    src/network/HeartbeatClient.cpp
     src/network/ClientTransportConfig.cpp
     src/network/ClientTransportFactory.cpp
     src/network/HttpJsonlLogSink.cpp
     src/network/JsonlBatchUploader.cpp
     src/network/LocalClaimCheckClipStore.cpp
-    src/network/ZmqFrameSender.cpp
+    src/network/LocalClipGarbageCollector.cpp
+    src/network/ReconnectPolicy.cpp
+    src/network/WinHttpClient.cpp
+    src/network/AuthApi.cpp
+    src/network/TokenStore.cpp
+    src/network/SessionApi.cpp
     src/alert/AlertManager.cpp
     src/alert/AlertDispatchThread.cpp
     src/analysis/ZmqPoseAnalyzer.cpp
@@ -61,7 +68,7 @@ if(MSVC)
         VS_GLOBAL_UseOfMfc "Dynamic"
     )
 
-    target_compile_options(StudySyncClient PRIVATE /permissive- /W4)
+    target_compile_options(StudySyncClient PRIVATE /permissive- /W4 /utf-8)
 endif()
 
 find_package(OpenCV CONFIG QUIET)
@@ -77,17 +84,7 @@ else()
     message(WARNING "OpenCV was not found. Set OpenCV_DIR before building the capture pipeline.")
 endif()
 
-target_link_libraries(StudySyncClient PRIVATE d2d1 dxgi)
-
-if(STUDYSYNC_ENABLE_ZMQ)
-    find_package(cppzmq CONFIG QUIET)
-    if(cppzmq_FOUND)
-        target_link_libraries(StudySyncClient PRIVATE cppzmq)
-        target_compile_definitions(StudySyncClient PRIVATE STUDYSYNC_HAS_ZMQ=1)
-    else()
-        message(WARNING "cppzmq was not found. Set CMAKE_TOOLCHAIN_FILE or cppzmq_DIR for ZMQ integration.")
-    endif()
-endif()
+target_link_libraries(StudySyncClient PRIVATE d2d1 dxgi dwrite winhttp ws2_32)
 
 if(STUDYSYNC_ENABLE_LOCAL_MEDIAPIPE)
     target_compile_definitions(StudySyncClient PRIVATE STUDYSYNC_ENABLE_LOCAL_MEDIAPIPE=1)

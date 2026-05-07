@@ -12,7 +12,7 @@ void HttpJsonlLogSink::append_analysis(const AnalysisResult& result)
     uploader_.append_analysis(result);
 }
 
-void HttpJsonlLogSink::append_event_metadata(const PostureEvent& event, const std::string& clip_ref)
+void HttpJsonlLogSink::append_event_metadata(const PostureEvent& event, const ClipRef& clip_ref)
 {
     uploader_.append_event_metadata(event, clip_ref);
 }
@@ -21,4 +21,3 @@ void HttpJsonlLogSink::flush()
 {
     uploader_.flush_to_http(endpoint_);
 }
-
