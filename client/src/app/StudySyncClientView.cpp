@@ -41,6 +41,7 @@ CStudySyncClientView::CStudySyncClientView()
     , capture_thread_(render_buffer_, send_buffer_, shadow_buffer_)
     , render_thread_(render_buffer_)
     , ai_tcp_client_(send_buffer_, shadow_buffer_, event_queue_, result_buffer_, transport_config_.jpeg_quality)
+    , dummy_generator_(result_buffer_, shadow_buffer_, event_queue_)
     , event_upload_thread_(event_queue_, *transports_.clip_store, *transports_.log_sink)
     , alert_dispatch_thread_(alert_queue_)
     , ai_heartbeat_("AI Server",    transport_config_.ai_server_host + ":9100")
@@ -77,11 +78,16 @@ int CStudySyncClientView::OnCreate(LPCREATESTRUCT lpCreateStruct)
     capture_thread_.start(0, transport_config_.capture_fps);
     render_thread_.start(m_hWnd, result_buffer_);
 
-    ai_tcp_client_.start(
-        transport_config_.ai_server_host,
-        transport_config_.ai_server_port,
-        session_id_,
-        transport_config_.frame_sample_interval);
+    if (transport_config_.use_dummy_ai) {
+        // AI 서버 없이 더미 분석결과로 전체 파이프라인 테스트
+        dummy_generator_.start(transport_config_.dummy_interval_ms);
+    } else {
+        ai_tcp_client_.start(
+            transport_config_.ai_server_host,
+            transport_config_.ai_server_port,
+            session_id_,
+            transport_config_.frame_sample_interval);
+    }
 
     event_upload_thread_.start();
     alert_dispatch_thread_.start();
@@ -129,7 +135,11 @@ void CStudySyncClientView::OnDestroy()
     ai_heartbeat_.stop();
     alert_dispatch_thread_.stop();
     event_upload_thread_.stop();
-    ai_tcp_client_.stop();
+    if (transport_config_.use_dummy_ai) {
+        dummy_generator_.stop();
+    } else {
+        ai_tcp_client_.stop();
+    }
     render_thread_.stop();
     capture_thread_.stop();
 

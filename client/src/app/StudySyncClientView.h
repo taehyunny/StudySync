@@ -2,6 +2,7 @@
 
 #include "alert/AlertDispatchThread.h"
 #include "alert/AlertManager.h"
+#include "analysis/DummyAnalysisGenerator.h"
 #include "capture/CaptureThread.h"
 #include "core/WorkerThreadPool.h"
 #include "event/EventQueue.h"
@@ -53,6 +54,7 @@ private:
     CaptureThread capture_thread_;
     RenderThread render_thread_;
     AiTcpClient ai_tcp_client_;
+    DummyAnalysisGenerator dummy_generator_;
     EventUploadThread event_upload_thread_;
     AlertDispatchThread alert_dispatch_thread_;
     HeartbeatClient ai_heartbeat_;

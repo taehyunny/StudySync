@@ -1,0 +1,402 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<title>StudySync — UI 목업</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: #1a1a2e; font-family: 'Segoe UI', sans-serif; color: #eee; }
+
+  h1 { text-align: center; padding: 28px 0 8px; font-size: 15px; color: #888; letter-spacing: 2px; text-transform: uppercase; }
+
+  /* ── 플로우 레이아웃 ── */
+  .flow {
+    display: flex;
+    align-items: flex-start;
+    justify-content: center;
+    gap: 0;
+    padding: 32px 24px 48px;
+    overflow-x: auto;
+  }
+  .arrow {
+    display: flex;
+    align-items: center;
+    padding: 0 6px;
+    padding-top: 60px;
+    color: #4a9eff;
+    font-size: 26px;
+  }
+  .label-flow {
+    text-align: center;
+    font-size: 11px;
+    color: #555;
+    margin-top: 8px;
+    letter-spacing: 1px;
+  }
+
+  /* ── 공통 윈도우 ── */
+  .win {
+    border-radius: 8px;
+    overflow: hidden;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.6);
+    flex-shrink: 0;
+  }
+  .titlebar {
+    display: flex;
+    align-items: center;
+    padding: 7px 10px;
+    background: #2d2d3a;
+    font-size: 12px;
+    color: #bbb;
+    gap: 6px;
+    user-select: none;
+  }
+  .titlebar .btn { width: 12px; height: 12px; border-radius: 50%; }
+  .btn-close { background: #ff5f57; }
+  .btn-min   { background: #febc2e; }
+  .btn-max   { background: #28c840; }
+  .titlebar .wintitle { margin-left: 4px; }
+
+  /* ── 등록 다이얼로그 ── */
+  .dlg-register { width: 300px; }
+  .dlg-register .body { background: #f0f0f0; padding: 20px; color: #222; }
+  .dlg-register .body h2 { font-size: 13px; font-weight: 600; margin-bottom: 14px; color: #333; }
+  .field { margin-bottom: 10px; }
+  .field label { display: block; font-size: 11px; color: #555; margin-bottom: 3px; }
+  .field input {
+    width: 100%; height: 24px; border: 1px solid #bbb;
+    border-radius: 3px; padding: 0 6px; font-size: 12px;
+    background: #fff; color: #333;
+  }
+  .field input.filled { border-color: #4a9eff; background: #f0f8ff; }
+  .btn-primary {
+    width: 100%; height: 28px; background: #4a9eff; color: #fff;
+    border: none; border-radius: 4px; font-size: 12px; cursor: pointer;
+    margin-top: 4px;
+  }
+  .btn-link { font-size: 11px; color: #4a9eff; text-align: center; margin-top: 8px; cursor: pointer; }
+
+  /* ── 로그인 다이얼로그 ── */
+  .dlg-login { width: 280px; }
+  .dlg-login .body { background: #f0f0f0; padding: 20px; color: #222; }
+  .dlg-login .body h2 { font-size: 13px; font-weight: 600; margin-bottom: 14px; color: #333; }
+  .success-badge {
+    background: #d4edda; border: 1px solid #c3e6cb; color: #155724;
+    font-size: 11px; padding: 5px 8px; border-radius: 4px; margin-top: 6px;
+    display: flex; align-items: center; gap: 4px;
+  }
+
+  /* ── 메인 창 ── */
+  .main-win { width: 640px; }
+  .main-body { background: #111; position: relative; height: 420px; overflow: hidden; }
+
+  /* 웹캠 배경 (그라디언트로 시뮬) */
+  .webcam {
+    position: absolute; inset: 0;
+    background: linear-gradient(160deg, #1a2535 0%, #0d1520 60%, #0a1018 100%);
+    display: flex; align-items: center; justify-content: center;
+  }
+  .person-silhouette {
+    width: 160px; height: 260px;
+    background: linear-gradient(180deg, #2a3a4a 0%, #1a2530 100%);
+    border-radius: 80px 80px 20px 20px;
+    position: relative;
+    opacity: 0.6;
+  }
+  .person-silhouette::before {
+    content: '';
+    position: absolute;
+    top: -45px; left: 50%; transform: translateX(-50%);
+    width: 80px; height: 80px;
+    background: #2a3a4a;
+    border-radius: 50%;
+  }
+
+  /* HUD 오버레이 */
+  .hud { position: absolute; inset: 0; pointer-events: none; }
+
+  /* 상단 상태 바 */
+  .hud-topbar {
+    position: absolute; top: 10px; left: 10px; right: 10px;
+    display: flex; gap: 8px; align-items: center;
+  }
+  .status-dot {
+    width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0;
+  }
+  .dot-focus  { background: #00e676; box-shadow: 0 0 6px #00e676; }
+  .dot-warn   { background: #ffab00; box-shadow: 0 0 6px #ffab00; }
+  .dot-danger { background: #ff5252; box-shadow: 0 0 6px #ff5252; }
+  .status-text { font-size: 12px; color: #eee; font-weight: 600; }
+  .session-time { margin-left: auto; font-size: 11px; color: #aaa; }
+
+  /* 집중도 바 (우측) */
+  .hud-right {
+    position: absolute; top: 40px; right: 12px; bottom: 40px;
+    width: 28px; display: flex; flex-direction: column; align-items: center; gap: 4px;
+  }
+  .focus-bar-bg {
+    flex: 1; width: 12px; background: rgba(255,255,255,0.1);
+    border-radius: 6px; overflow: hidden; position: relative;
+  }
+  .focus-bar-fill {
+    position: absolute; bottom: 0; left: 0; right: 0;
+    background: linear-gradient(0deg, #00e676, #69f0ae);
+    border-radius: 6px;
+    transition: height 0.3s;
+  }
+  .focus-label { font-size: 10px; color: #aaa; }
+  .focus-val   { font-size: 13px; color: #00e676; font-weight: 700; }
+
+  /* 우측 하단 패널 */
+  .hud-panel {
+    position: absolute; bottom: 10px; right: 46px;
+    background: rgba(0,0,0,0.65); border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 6px; padding: 8px 12px; min-width: 150px;
+    backdrop-filter: blur(4px);
+  }
+  .panel-row {
+    display: flex; justify-content: space-between; align-items: center;
+    font-size: 11px; color: #ccc; margin-bottom: 4px; gap: 12px;
+  }
+  .panel-row:last-child { margin-bottom: 0; }
+  .val-ok   { color: #00e676; font-weight: 600; }
+  .val-warn { color: #ffab00; font-weight: 600; }
+  .val-bad  { color: #ff5252; font-weight: 600; }
+
+  /* EAR 바 */
+  .ear-bar-bg { width: 60px; height: 6px; background: rgba(255,255,255,0.15); border-radius: 3px; overflow: hidden; }
+  .ear-bar-fill { height: 100%; background: #4a9eff; border-radius: 3px; }
+
+  /* 이벤트 알림 토스트 */
+  .toast {
+    position: absolute; top: 44px; left: 10px;
+    background: rgba(255, 82, 82, 0.92);
+    border-radius: 6px; padding: 8px 12px;
+    font-size: 12px; color: #fff; font-weight: 600;
+    display: flex; align-items: center; gap: 6px;
+    box-shadow: 0 2px 12px rgba(255,82,82,0.4);
+    max-width: 240px;
+  }
+  .toast-icon { font-size: 16px; }
+  .toast-sub  { font-size: 10px; color: rgba(255,255,255,0.8); margin-top: 2px; font-weight: 400; }
+
+  /* 랜드마크 (포즈 키포인트) */
+  .landmarks {
+    position: absolute; inset: 0;
+  }
+  .lm {
+    position: absolute; width: 6px; height: 6px;
+    border-radius: 50%; background: #4a9eff;
+    box-shadow: 0 0 4px #4a9eff;
+    transform: translate(-50%, -50%);
+  }
+  .lm-line {
+    position: absolute; background: rgba(74,158,255,0.4);
+    height: 2px; transform-origin: left center;
+  }
+
+  /* 메뉴바 */
+  .menubar {
+    background: #2d2d3a; padding: 4px 12px;
+    display: flex; gap: 16px; font-size: 12px; color: #bbb;
+    border-bottom: 1px solid #1a1a28;
+  }
+  .menubar span { cursor: pointer; }
+  .menubar span:hover { color: #fff; }
+
+  /* 상태바 */
+  .statusbar {
+    background: #1e1e2e; padding: 4px 12px;
+    display: flex; gap: 16px; font-size: 11px; color: #666;
+    border-top: 1px solid #111;
+  }
+  .statusbar .conn-ok   { color: #00e676; }
+  .statusbar .conn-disc { color: #ff5252; }
+
+  /* ── 탭 레이블 ── */
+  .screen-label {
+    text-align: center; font-size: 12px; color: #556;
+    margin-top: 10px; letter-spacing: 1px;
+  }
+</style>
+</head>
+<body>
+
+<h1>StudySync — UI 목업 (회원가입 → 로그인 → 메인 뷰)</h1>
+
+<div class="flow">
+
+  <!-- ① 회원가입 다이얼로그 -->
+  <div>
+    <div class="win dlg-register">
+      <div class="titlebar">
+        <div class="btn btn-close"></div>
+        <div class="btn btn-min"></div>
+        <div class="btn btn-max"></div>
+        <span class="wintitle">StudySync — 회원가입</span>
+      </div>
+      <div class="body">
+        <h2>새 계정 만들기</h2>
+        <div class="field">
+          <label>이름</label>
+          <input class="filled" type="text" value="정태현">
+        </div>
+        <div class="field">
+          <label>이메일</label>
+          <input class="filled" type="text" value="taehyun@studysync.io">
+        </div>
+        <div class="field">
+          <label>비밀번호</label>
+          <input class="filled" type="password" value="••••••••">
+        </div>
+        <div class="field">
+          <label>비밀번호 확인</label>
+          <input class="filled" type="password" value="••••••••">
+        </div>
+        <button class="btn-primary">회원가입</button>
+        <div class="btn-link">이미 계정이 있으신가요? 로그인</div>
+      </div>
+    </div>
+    <div class="screen-label">① 회원가입</div>
+  </div>
+
+  <div class="arrow">→</div>
+
+  <!-- ② 로그인 다이얼로그 -->
+  <div>
+    <div class="win dlg-login">
+      <div class="titlebar">
+        <div class="btn btn-close"></div>
+        <div class="btn btn-min"></div>
+        <div class="btn btn-max"></div>
+        <span class="wintitle">StudySync — 로그인</span>
+      </div>
+      <div class="body">
+        <h2>로그인</h2>
+        <div class="field">
+          <label>이메일</label>
+          <input class="filled" type="text" value="taehyun@studysync.io">
+        </div>
+        <div class="field">
+          <label>비밀번호</label>
+          <input class="filled" type="password" value="••••••••">
+        </div>
+        <button class="btn-primary">로그인</button>
+        <div class="success-badge">
+          <span>✓</span> 로그인 성공 → 세션 시작 중...
+        </div>
+        <div class="btn-link">계정이 없으신가요? 회원가입</div>
+      </div>
+    </div>
+    <div class="screen-label">② 로그인 + 세션 시작</div>
+  </div>
+
+  <div class="arrow">→</div>
+
+  <!-- ③ 메인 뷰 -->
+  <div>
+    <div class="win main-win">
+      <div class="titlebar">
+        <div class="btn btn-close"></div>
+        <div class="btn btn-min"></div>
+        <div class="btn btn-max"></div>
+        <span class="wintitle">StudySync — 학습 모니터링 (세션 #1001)</span>
+      </div>
+      <div class="menubar">
+        <span>파일</span><span>보기</span><span>설정</span><span>도움말</span>
+      </div>
+      <div class="main-body">
+
+        <!-- 웹캠 시뮬 -->
+        <div class="webcam">
+          <div class="person-silhouette"></div>
+        </div>
+
+        <!-- 포즈 랜드마크 (예시 점) -->
+        <div class="landmarks">
+          <!-- 얼굴 -->
+          <div class="lm" style="left:52%;top:18%"></div>
+          <div class="lm" style="left:48%;top:20%"></div>
+          <div class="lm" style="left:50%;top:24%"></div>
+          <!-- 어깨 -->
+          <div class="lm" style="left:38%;top:36%"></div>
+          <div class="lm" style="left:62%;top:36%"></div>
+          <!-- 팔꿈치 -->
+          <div class="lm" style="left:32%;top:52%"></div>
+          <div class="lm" style="left:68%;top:52%"></div>
+        </div>
+
+        <!-- HUD 오버레이 -->
+        <div class="hud">
+
+          <!-- 상단 상태 -->
+          <div class="hud-topbar">
+            <div class="status-dot dot-focus"></div>
+            <div class="status-text">집중 중</div>
+            <div class="session-time">⏱ 00:23:14</div>
+          </div>
+
+          <!-- 이벤트 알림 토스트 (예시) -->
+          <div class="toast">
+            <span class="toast-icon">⚠️</span>
+            <div>
+              <div>목 각도 초과 감지</div>
+              <div class="toast-sub">자세를 바르게 해주세요 • 3초 전</div>
+            </div>
+          </div>
+
+          <!-- 집중도 바 (우측) -->
+          <div class="hud-right">
+            <div class="focus-val">82</div>
+            <div class="focus-bar-bg">
+              <div class="focus-bar-fill" style="height:82%"></div>
+            </div>
+            <div class="focus-label">집중</div>
+          </div>
+
+          <!-- 수치 패널 -->
+          <div class="hud-panel">
+            <div class="panel-row">
+              <span>목 각도</span>
+              <span class="val-ok">11.3°</span>
+            </div>
+            <div class="panel-row">
+              <span>어깨 차이</span>
+              <span class="val-warn">7.2</span>
+            </div>
+            <div class="panel-row">
+              <span>EAR (졸음)</span>
+              <div class="ear-bar-bg">
+                <div class="ear-bar-fill" style="width:70%"></div>
+              </div>
+            </div>
+            <div class="panel-row">
+              <span>자세</span>
+              <span class="val-ok">정상</span>
+            </div>
+            <div class="panel-row">
+              <span>졸음</span>
+              <span class="val-ok">없음</span>
+            </div>
+            <div class="panel-row">
+              <span>자리비움</span>
+              <span class="val-ok">없음</span>
+            </div>
+          </div>
+
+        </div><!-- /hud -->
+      </div><!-- /main-body -->
+
+      <div class="statusbar">
+        <span class="conn-ok">● 메인서버 연결됨</span>
+        <span class="conn-disc">● AI서버 준비 중</span>
+        <span style="margin-left:auto">세션 #1001 | 로그 업로드: 정상</span>
+      </div>
+    </div>
+    <div class="screen-label">③ 메인 모니터링 뷰 (HUD + 이벤트 알림)</div>
+  </div>
+
+</div><!-- /flow -->
+
+</body>
+</html>
