@@ -3,6 +3,7 @@
 #include "alert/AlertDispatchThread.h"
 #include "alert/AlertManager.h"
 #include "analysis/DummyAnalysisGenerator.h"
+#include "model/ReviewEventStore.h"
 #include "model/ServerStatsSnapshot.h"
 #include "model/SessionStatsHistory.h"
 #include "model/ToastBuffer.h"
@@ -34,6 +35,9 @@ public:
 
     // Stores the active study session id after login/start-session succeeds.
     void set_session_id(long long session_id, const std::string& start_time);
+
+    // 세션 이벤트 복기 저장소 (MainFrm이 세션 종료 시 ReviewDlg에 전달)
+    ReviewEventStore& review_store() { return review_store_; }
 
 protected:
     afx_msg int OnCreate(LPCREATESTRUCT lpCreateStruct);
@@ -70,6 +74,7 @@ private:
     SessionStatsHistory  stats_history_;    // result_callback(쓰기) ↔ OverlayPainter(읽기)
 
     ServerStatsSnapshot  server_stats_;      // StatsApi(worker) -> OverlayPainter(render)
+    ReviewEventStore     review_store_;     // EventUploadThread(쓰기) ↔ ReviewDlg(읽기)
 
     ClientTransportConfig transport_config_;
     ClientTransports transports_;

@@ -131,6 +131,7 @@ std::string JsonlBatchUploader::to_jsonl(const PostureEvent& event) const
         << ",\"event_id\":\""   << escape_json(event.event_id) << "\""
         << ",\"timestamp_ms\":" << event.timestamp_ms
         << ",\"reason\":\""     << escape_json(event.reason) << "\""
+        << ",\"confidence\":"   << event.confidence
         << ",\"frame_count\":"  << event.frames.size()
         << "}";
     return out.str();

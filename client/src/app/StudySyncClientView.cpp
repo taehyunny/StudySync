@@ -197,6 +197,7 @@ int CStudySyncClientView::OnCreate(LPCREATESTRUCT lpCreateStruct)
             transport_config_.frame_sample_interval);
     }
 
+    event_upload_thread_.set_review_store(&review_store_);
     event_upload_thread_.start();
     alert_dispatch_thread_.start();
 
