@@ -7,10 +7,9 @@
 //   TCP로 수신하여 PACKET_RECEIVED 이벤트로 EventBus에 발행한다.
 //
 // 패킷 프로토콜:
-//   [4바이트 JSON 길이(Big-Endian)] + [JSON 본문]
-//     + [원본 이미지(옵션)] + [히트맵 PNG(옵션)] + [Pred Mask PNG(옵션)]
-//   각 이미지의 유무/크기는 JSON 내 "image_size", "heatmap_size",
-//   "pred_mask_size" 필드로 판단한다 (v0.9.0+, 없으면 0으로 하위호환).
+//   [4바이트 JSON 길이(Big-Endian)] + [JSON 본문] + [바이너리(옵션)]
+//   바이너리 크기는 JSON 의 "image_size" 필드로 판단. 0 또는 누락이면 비어 있음.
+//   StudySync 도메인 메시지는 본문 없음. TRAIN_COMPLETE 시에만 모델 바이너리 동봉.
 //
 // 스레드 구조:
 //   - accept 스레드 1개: 클라이언트 연결 수락
@@ -55,13 +54,11 @@ private:
     /// @param remote_addr "IP:PORT" 문자열 (ACK 회신 라우팅 키로 사용)
     void handle_client(int client_fd, const std::string& remote_addr);
 
-    /// 패킷 한 건 수신: length-prefixed JSON + 선택적 이미지 바이너리
+    /// 패킷 한 건 수신: length-prefixed JSON + 선택적 단일 바이너리 (모델 등)
     /// @return false 시 연결 종료 또는 프로토콜 오류 → 세션 종료
     bool recv_one_packet(int client_fd,
                          std::string& out_json,
-                         std::vector<uint8_t>& out_image,
-                         std::vector<uint8_t>& out_heatmap,
-                         std::vector<uint8_t>& out_pred_mask);
+                         std::vector<uint8_t>& out_image);
 
     EventBus&         event_bus_;       // 이벤트 발행용 버스 참조
     uint16_t          listen_port_;     // 리슨 포트

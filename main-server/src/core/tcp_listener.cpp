@@ -185,19 +185,14 @@ void TcpListener::handle_client(int client_fd, const std::string& remote_addr) {
     while (is_running_.load()) {
         std::string          json_payload;
         std::vector<uint8_t> image_bytes;
-        std::vector<uint8_t> heatmap_bytes;
-        std::vector<uint8_t> pred_mask_bytes;
-        if (!recv_one_packet(client_fd, json_payload, image_bytes,
-                             heatmap_bytes, pred_mask_bytes)) {
+        if (!recv_one_packet(client_fd, json_payload, image_bytes)) {
             break;
         }
 
         PacketReceivedEvent ev{};
-        ev.json_payload     = std::move(json_payload);
-        ev.image_bytes      = std::move(image_bytes);
-        ev.heatmap_bytes    = std::move(heatmap_bytes);
-        ev.pred_mask_bytes  = std::move(pred_mask_bytes);
-        ev.remote_addr      = remote_addr;
+        ev.json_payload = std::move(json_payload);
+        ev.image_bytes  = std::move(image_bytes);
+        ev.remote_addr  = remote_addr;
         event_bus_.publish(EventType::PACKET_RECEIVED, ev);
     }
 
@@ -233,10 +228,8 @@ static std::size_t extract_size_field(const std::string& json, const char* key) 
 
 bool TcpListener::recv_one_packet(int client_fd,
                                   std::string& out_json,
-                                  std::vector<uint8_t>& out_image,
-                                  std::vector<uint8_t>& out_heatmap,
-                                  std::vector<uint8_t>& out_pred_mask) {
-    // [4byte length(BE)] + [JSON] + [원본?] + [히트맵?] + [마스크?]
+                                  std::vector<uint8_t>& out_image) {
+    // [4byte length(BE)] + [JSON] + [바이너리(옵션, image_size 바이트)]
     uint8_t header[HEADER_SIZE];
     if (!recv_n(client_fd, header, HEADER_SIZE)) return false;
 
@@ -253,29 +246,17 @@ bool TcpListener::recv_one_packet(int client_fd,
     out_json.assign(json_size, '\0');
     if (!recv_n(client_fd, out_json.data(), json_size)) return false;
 
-    // 세 이미지의 바이트 수를 JSON 문자열에서 직접 추출한다.
-    // v0.9.0+ AI서버는 세 필드 모두 포함, 구버전은 image_size만 있고 나머지는 0.
-    const std::size_t image_size     = extract_size_field(out_json, "\"image_size\"");
-    const std::size_t heatmap_size   = extract_size_field(out_json, "\"heatmap_size\"");
-    const std::size_t pred_mask_size = extract_size_field(out_json, "\"pred_mask_size\"");
-
-    // 각 이미지를 50MB 상한으로 검증 후 순서대로 수신
-    //   1) 원본 → 2) 히트맵 → 3) 마스크 (AI서버 Packet.py 송신 순서와 동일)
-    constexpr std::size_t MAX_IMG = 50ULL * 1024 * 1024;
-
-    auto recv_blob = [&](std::size_t sz, std::vector<uint8_t>& out, const char* tag) -> bool {
-        if (sz == 0) return true;
-        if (sz > MAX_IMG) {
-            log_err_main("이미지 크기 초과 | %s size=%zu", tag, sz);
-            return false;
-        }
-        out.resize(sz);
-        return recv_n(client_fd, out.data(), sz);
-    };
-
-    if (!recv_blob(image_size,     out_image,     "image"))     return false;
-    if (!recv_blob(heatmap_size,   out_heatmap,   "heatmap"))   return false;
-    if (!recv_blob(pred_mask_size, out_pred_mask, "pred_mask")) return false;
+    // 바이너리 (TRAIN_COMPLETE 시 모델 파일 등) — 500MB 상한.
+    const std::size_t image_size = extract_size_field(out_json, "\"image_size\"");
+    constexpr std::size_t MAX_BLOB = 500ULL * 1024 * 1024;
+    if (image_size > MAX_BLOB) {
+        log_err_main("바이너리 크기 초과 | size=%zu", image_size);
+        return false;
+    }
+    if (image_size > 0) {
+        out_image.resize(image_size);
+        if (!recv_n(client_fd, out_image.data(), image_size)) return false;
+    }
     return true;
 }
 
