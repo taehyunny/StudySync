@@ -115,7 +115,9 @@ void Router::on_packet_received(const std::any& payload) {
             ev.is_absent    = extract_bool(packet.json_payload, "is_absent");
             ev.is_drowsy    = extract_bool(packet.json_payload, "is_drowsy");
             ev.sender_addr  = packet.remote_addr;
-            event_bus_.publish(EventType::FOCUS_LOG_PUSH_RECEIVED, ev);
+            if (!event_bus_.publish_critical(EventType::FOCUS_LOG_PUSH_RECEIVED, ev)) {
+                log_err_route("FOCUS_LOG_PUSH 큐잉 실패 | req=%s", ev.request_id.c_str());
+            }
             break;
         }
 
@@ -134,7 +136,9 @@ void Router::on_packet_received(const std::any& payload) {
             ev.has_vs_baseline   = has_key   (packet.json_payload, "vs_baseline");
             ev.vs_baseline       = extract_double(packet.json_payload, "vs_baseline");
             ev.sender_addr       = packet.remote_addr;
-            event_bus_.publish(EventType::POSTURE_LOG_PUSH_RECEIVED, ev);
+            if (!event_bus_.publish_critical(EventType::POSTURE_LOG_PUSH_RECEIVED, ev)) {
+                log_err_route("POSTURE_LOG_PUSH 큐잉 실패 | req=%s", ev.request_id.c_str());
+            }
             break;
         }
 
@@ -162,7 +166,9 @@ void Router::on_packet_received(const std::any& payload) {
                 ev.expires_at_ms     = extract_ll(packet.json_payload, "expires_at_ms");
             }
             ev.sender_addr   = packet.remote_addr;
-            event_bus_.publish(EventType::POSTURE_EVENT_PUSH_RECEIVED, ev);
+            if (!event_bus_.publish_critical(EventType::POSTURE_EVENT_PUSH_RECEIVED, ev)) {
+                log_err_route("POSTURE_EVENT_PUSH 큐잉 실패 | event_id=%s", ev.event_id.c_str());
+            }
             break;
         }
 
@@ -176,7 +182,9 @@ void Router::on_packet_received(const std::any& payload) {
             ev.neck_angle    = extract_double(packet.json_payload, "neck_angle");
             ev.shoulder_diff = extract_double(packet.json_payload, "shoulder_diff");
             ev.sender_addr   = packet.remote_addr;
-            event_bus_.publish(EventType::BASELINE_CAPTURE_RECEIVED, ev);
+            if (!event_bus_.publish_critical(EventType::BASELINE_CAPTURE_RECEIVED, ev)) {
+                log_err_route("BASELINE_CAPTURE 큐잉 실패 | req=%s", ev.request_id.c_str());
+            }
             break;
         }
 
@@ -214,7 +222,9 @@ void Router::on_packet_received(const std::any& payload) {
             ev.message     = extract_str(packet.json_payload, "message");
             ev.sender_addr = packet.remote_addr;
             ev.model_bytes = packet.image_bytes;  // 모델 파일 바이너리 = 동봉된 바이트
-            event_bus_.publish(EventType::TRAIN_COMPLETE_RECEIVED, ev);
+            if (!event_bus_.publish_critical(EventType::TRAIN_COMPLETE_RECEIVED, ev)) {
+                log_err_route("TRAIN_COMPLETE 큐잉 실패 | req=%s", ev.request_id.c_str());
+            }
             break;
         }
 
@@ -227,7 +237,9 @@ void Router::on_packet_received(const std::any& payload) {
             ev.message     = extract_str(packet.json_payload, "message");
             ev.version     = extract_str(packet.json_payload, "version");
             ev.sender_addr = packet.remote_addr;
-            event_bus_.publish(EventType::TRAIN_FAIL_RECEIVED, ev);
+            if (!event_bus_.publish_critical(EventType::TRAIN_FAIL_RECEIVED, ev)) {
+                log_err_route("TRAIN_FAIL 큐잉 실패 | req=%s", ev.request_id.c_str());
+            }
             break;
         }
 

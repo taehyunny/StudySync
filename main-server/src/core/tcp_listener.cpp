@@ -193,7 +193,10 @@ void TcpListener::handle_client(int client_fd, const std::string& remote_addr) {
         ev.json_payload = std::move(json_payload);
         ev.image_bytes  = std::move(image_bytes);
         ev.remote_addr  = remote_addr;
-        event_bus_.publish(EventType::PACKET_RECEIVED, ev);
+        if (!event_bus_.publish_critical(EventType::PACKET_RECEIVED, ev)) {
+            log_err_main("TCP 패킷 큐잉 실패 | ACK 필요 가능 packet 드롭 addr=%s",
+                         remote_addr.c_str());
+        }
     }
 
     log_main("AI서버 연결 해제 | fd=%d ip=%s", client_fd, remote_addr.c_str());

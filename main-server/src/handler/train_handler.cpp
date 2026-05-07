@@ -34,7 +34,10 @@ void TrainHandler::on_train_complete(const std::any& payload) {
     ack.sender_addr = ev.sender_addr;
     ack.ack_ok      = result.success;
     if (!result.success) ack.error_message = result.error_message;
-    event_bus_.publish(EventType::ACK_SEND_REQUESTED, ack);
+    if (!event_bus_.publish_critical(EventType::ACK_SEND_REQUESTED, ack,
+                                     std::chrono::milliseconds(200), true)) {
+        log_err_ack("TRAIN_COMPLETE_ACK 큐잉 실패 | req=%s", ack.request_id.c_str());
+    }
 
     if (result.success && !ev.model_bytes.empty()) {
         ModelReloadEvent reload{};
@@ -42,7 +45,9 @@ void TrainHandler::on_train_complete(const std::any& payload) {
         reload.model_path  = result.saved_model_path;
         reload.version     = ev.version;
         reload.model_bytes = ev.model_bytes;
-        event_bus_.publish(EventType::MODEL_RELOAD_REQUESTED, reload);
+        if (!event_bus_.publish_critical(EventType::MODEL_RELOAD_REQUESTED, reload)) {
+            log_err_train("MODEL_RELOAD_REQUEST 큐잉 실패 | type=%s", ev.model_type.c_str());
+        }
         log_train("추론서버 모델 리로드 요청 | type=%s", ev.model_type.c_str());
     }
 }

@@ -23,6 +23,7 @@
 #include "core/event_bus.h"
 #include "core/tcp_listener.h"
 #include "core/config.h"
+#include "core/logger.h"
 #include "handler/router.h"
 #include "handler/ack_sender.h"
 #include "handler/train_handler.h"
@@ -85,7 +86,9 @@ int main(int argc, char* argv[]) {
     std::string db_password  = cfg.get_str("database.password", "1234");
     std::string db_schema    = cfg.get_str("database.schema",   "StudySync");
     int         db_pool_size = cfg.get_int("database.pool_size", 4);
-    int         worker_count = 4;
+    int         worker_count = cfg.get_int("limits.event_bus_workers", 4);
+    int         event_queue_max = cfg.get_int("limits.event_queue_max", 10000);
+    int         critical_event_queue_max = cfg.get_int("limits.critical_event_queue_max", 1024);
 
     // JWT
     std::string jwt_secret      = cfg.get_str("auth.jwt_secret",
@@ -95,7 +98,9 @@ int main(int argc, char* argv[]) {
     if (const char* env = std::getenv("JWT_SECRET")) jwt_secret = env;
 
     // 1) EventBus
-    EventBus event_bus(worker_count);
+    EventBus event_bus(worker_count,
+                       static_cast<std::size_t>(event_queue_max),
+                       static_cast<std::size_t>(critical_event_queue_max));
     event_bus.start();
 
     // 2) Router (TCP 측)
@@ -170,8 +175,26 @@ int main(int argc, char* argv[]) {
     std::cout << "🔄 [MAIN ] StudySync 메인서버 시작 완료 | TCP=" << ai_port
               << " HTTP=" << http_port << " | Ctrl+C 종료" << std::endl;
 
+    auto last_event_bus_log = std::chrono::steady_clock::now();
     while (!g_should_exit.load()) {
         std::this_thread::sleep_for(std::chrono::milliseconds(200));
+
+        auto now = std::chrono::steady_clock::now();
+        if (now - last_event_bus_log >= std::chrono::seconds(30)) {
+            auto s = event_bus.stats();
+            log_main("EventBus stats | normal=%zu/%d critical=%zu/%d "
+                     "pub=%llu crit_pub=%llu drop=%llu crit_drop=%llu "
+                     "hwm=%zu crit_hwm=%zu",
+                     s.queue_size, event_queue_max,
+                     s.critical_queue_size, critical_event_queue_max,
+                     static_cast<unsigned long long>(s.published),
+                     static_cast<unsigned long long>(s.critical_published),
+                     static_cast<unsigned long long>(s.dropped),
+                     static_cast<unsigned long long>(s.critical_dropped),
+                     s.high_water_mark,
+                     s.critical_high_water_mark);
+            last_event_bus_log = now;
+        }
     }
 
     std::cout << "🔄 [MAIN ] 서버 종료 중..." << std::endl;

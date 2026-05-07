@@ -25,7 +25,10 @@
 
 #include <any>
 #include <atomic>
+#include <chrono>
 #include <condition_variable>
+#include <cstdint>
+#include <deque>
 #include <functional>
 #include <mutex>
 #include <queue>
@@ -40,8 +43,11 @@ public:
     using Handler = std::function<void(const std::any&)>;
 
     /// @param worker_count 워커 스레드 수 (기본 4)
-    /// @param max_queue_size 큐 최대 크기 (기본 10000, 초과 시 drop)
-    explicit EventBus(int worker_count = 4, std::size_t max_queue_size = 10000);
+    /// @param max_queue_size 일반 큐 최대 크기 (기본 10000, 초과 시 drop)
+    /// @param max_critical_queue_size ACK 필요 이벤트용 우선 큐 최대 크기
+    explicit EventBus(int worker_count = 4,
+                      std::size_t max_queue_size = 10000,
+                      std::size_t max_critical_queue_size = 1024);
     ~EventBus();
 
     EventBus(const EventBus&)            = delete;
@@ -55,11 +61,30 @@ public:
     /// 이벤트 구독 (동일 이벤트에 여러 핸들러 등록 가능)
     void subscribe(EventType type, Handler handler);
 
-    /// 이벤트 발행 (논블로킹, 큐 적재 후 즉시 반환)
-    void publish(EventType type, std::any payload);
+    struct Stats {
+        std::uint64_t published = 0;
+        std::uint64_t critical_published = 0;
+        std::uint64_t dropped = 0;
+        std::uint64_t critical_dropped = 0;
+        std::size_t   queue_size = 0;
+        std::size_t   critical_queue_size = 0;
+        std::size_t   high_water_mark = 0;
+        std::size_t   critical_high_water_mark = 0;
+    };
+
+    /// 이벤트 발행 (논블로킹, 큐 적재 후 즉시 반환). 큐 포화 시 false.
+    bool publish(EventType type, std::any payload);
+
+    /// ACK/재전송과 연결되는 중요 이벤트 발행. 우선 큐에 넣고, 포화 시 timeout 동안 백프레셔.
+    bool publish_critical(EventType type, std::any payload,
+                          std::chrono::milliseconds timeout = std::chrono::milliseconds(200),
+                          bool front = false);
+
+    Stats stats() const;
 
 private:
     void worker_loop();
+    void update_high_water_locked(bool critical);
 
     struct Event {
         EventType type;
@@ -72,14 +97,23 @@ private:
 
     // 이벤트 큐
     std::queue<Event>                                   event_queue_;
-    std::mutex                                          queue_mutex_;
+    std::deque<Event>                                   critical_event_queue_;
+    mutable std::mutex                                  queue_mutex_;
     std::condition_variable                             queue_cv_;
+    std::condition_variable                             queue_space_cv_;
 
     // 워커 풀
     std::vector<std::thread>                            workers_;
     int                                                 worker_count_;
     std::size_t                                         max_queue_size_;
+    std::size_t                                         max_critical_queue_size_;
     std::atomic<bool>                                   is_running_;
+    std::atomic<std::uint64_t>                          published_count_{0};
+    std::atomic<std::uint64_t>                          critical_published_count_{0};
+    std::atomic<std::uint64_t>                          dropped_count_{0};
+    std::atomic<std::uint64_t>                          critical_dropped_count_{0};
+    std::size_t                                         high_water_mark_ = 0;
+    std::size_t                                         critical_high_water_mark_ = 0;
 };
 
 } // namespace factory
