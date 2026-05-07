@@ -111,7 +111,7 @@ HttpResponse WinHttpClient::send_request(
     // 연결 대상 디버그 출력 (요청이 어디로 가는지 확인용)
     {
         char dbg[256];
-        std::string host_utf8(parts.host.begin(), parts.host.end());
+        std::string host_utf8 = to_utf8(parts.host.c_str(), static_cast<int>(parts.host.size()));
         snprintf(dbg, sizeof(dbg),
             "[WinHttp] -> %s:%d%s\n",
             host_utf8.c_str(), parts.port, path.c_str());
