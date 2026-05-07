@@ -39,6 +39,9 @@ public:
     // 세션 이벤트 복기 저장소 (MainFrm이 세션 종료 시 ReviewDlg에 전달)
     ReviewEventStore& review_store() { return review_store_; }
 
+    // 현재 세션 ID (FeedbackApi 전송 시 사용)
+    long long session_id() const { return session_id_; }
+
 protected:
     afx_msg int OnCreate(LPCREATESTRUCT lpCreateStruct);
     afx_msg void OnDestroy();

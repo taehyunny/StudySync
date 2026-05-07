@@ -3,6 +3,7 @@
 #include "model/ReviewEvent.h"
 #include "model/ReviewEventStore.h"
 #include "network/ConsentStore.h"
+#include "network/FeedbackApi.h"
 
 #include <vector>
 
@@ -14,12 +15,15 @@
 //   - confidence >= 0.85 : 회색 텍스트, 피드백 버튼 없음 (확실한 판정)
 //
 // [맞아요]   → 이벤트를 'Correct'로 표시, 별도 업로드 없음
-// [틀렸어요] → ConsentStore 확인 후 동의 팝업 (최초 1회) → 'Wrong' 표시
-//             (Stage 3에서 FeedbackApi /feedback 실제 업로드 연결)
+// [틀렸어요] → ConsentStore 확인 후 동의 팝업 (최초 1회)
+//             → FeedbackApi::send() POST /feedback multipart/form-data
 
 class ReviewDlg : public CDialog {
 public:
-    explicit ReviewDlg(ReviewEventStore& store, CWnd* parent = nullptr);
+    // session_id: FeedbackApi 전송 시 포함할 세션 ID
+    explicit ReviewDlg(ReviewEventStore& store,
+                       long long session_id,
+                       CWnd* parent = nullptr);
 
     enum { IDD = 202 }; // IDD_REVIEW
 
@@ -47,6 +51,7 @@ private:
     static CString feedback_label(ReviewEvent::Feedback fb);
 
     ReviewEventStore&        store_;
+    long long                session_id_ = 0;
     std::vector<ReviewEvent> events_;
 
     CListCtrl list_ctrl_;

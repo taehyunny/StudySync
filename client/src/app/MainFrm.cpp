@@ -63,7 +63,7 @@ void CMainFrame::OnClose()
     if (view_) {
         ReviewEventStore& store = view_->review_store();
         if (store.count_uncertain() > 0) {
-            ReviewDlg dlg(store, this);
+            ReviewDlg dlg(store, view_->session_id(), this);
             dlg.DoModal();
         }
     }
