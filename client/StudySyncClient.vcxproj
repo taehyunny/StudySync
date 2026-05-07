@@ -47,6 +47,7 @@
       <LanguageStandard>stdcpp17</LanguageStandard>
       <PrecompiledHeader>Use</PrecompiledHeader>
       <PrecompiledHeaderFile>pch.h</PrecompiledHeaderFile>
+      <AdditionalOptions>/utf-8 %(AdditionalOptions)</AdditionalOptions>
     </ClCompile>
     <Link>
       <AdditionalLibraryDirectories>$(OpenCVRoot)\x64\vc16\lib;$(ZMQ_DIR)\lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
@@ -54,6 +55,7 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClInclude Include="include\analysis\DummyAnalysisGenerator.h" />
     <ClInclude Include="include\analysis\IPoseAnalyzer.h" />
     <ClInclude Include="include\analysis\LocalMediaPipePoseAnalyzer.h" />
     <ClInclude Include="include\analysis\ZmqPoseAnalyzer.h" />
@@ -69,8 +71,10 @@
     <ClInclude Include="include\event\PostureEventDetector.h" />
     <ClInclude Include="include\model\AnalysisResult.h" />
     <ClInclude Include="include\model\Alert.h" />
+    <ClInclude Include="include\model\AnalysisResultBuffer.h" />
     <ClInclude Include="include\model\Frame.h" />
     <ClInclude Include="include\model\PostureEvent.h" />
+    <ClInclude Include="include\model\ToastBuffer.h" />
     <ClInclude Include="include\model\User.h" />
     <ClInclude Include="include\network\ConnectionState.h" />
     <ClInclude Include="include\network\EventUploadThread.h" />
@@ -104,6 +108,7 @@
     <ClInclude Include="src\app\targetver.h" />
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="src\analysis\DummyAnalysisGenerator.cpp" />
     <ClCompile Include="src\analysis\LocalMediaPipePoseAnalyzer.cpp" />
     <ClCompile Include="src\analysis\ZmqPoseAnalyzer.cpp" />
     <ClCompile Include="src\alert\AlertDispatchThread.cpp" />

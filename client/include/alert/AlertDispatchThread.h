@@ -1,13 +1,14 @@
 #pragma once
 
 #include "alert/AlertQueue.h"
+#include "model/ToastBuffer.h"
 
 #include <atomic>
 #include <thread>
 
 class AlertDispatchThread {
 public:
-    explicit AlertDispatchThread(AlertQueue& alert_queue);
+    AlertDispatchThread(AlertQueue& alert_queue, ToastBuffer& toast_buffer);
     ~AlertDispatchThread();
 
     void start();
@@ -18,7 +19,8 @@ private:
     void show_popup(const Alert& alert);
     void send_to_arduino(const Alert& alert);
 
-    AlertQueue& alert_queue_;
+    AlertQueue&  alert_queue_;
+    ToastBuffer& toast_buffer_;
     std::atomic_bool running_{ false };
     std::thread worker_;
 };

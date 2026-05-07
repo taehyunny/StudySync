@@ -41,6 +41,7 @@ add_executable(StudySyncClient WIN32
     src/network/SessionApi.cpp
     src/alert/AlertManager.cpp
     src/alert/AlertDispatchThread.cpp
+    src/analysis/DummyAnalysisGenerator.cpp
     src/analysis/ZmqPoseAnalyzer.cpp
     src/analysis/LocalMediaPipePoseAnalyzer.cpp
     res/StudySyncClient.rc

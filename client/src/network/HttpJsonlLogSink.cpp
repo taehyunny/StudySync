@@ -7,6 +7,11 @@ HttpJsonlLogSink::HttpJsonlLogSink(std::string endpoint, std::size_t flush_thres
 {
 }
 
+void HttpJsonlLogSink::set_session_id(long long session_id)
+{
+    uploader_.set_session_id(session_id);
+}
+
 void HttpJsonlLogSink::append_analysis(const AnalysisResult& result)
 {
     uploader_.append_analysis(result);

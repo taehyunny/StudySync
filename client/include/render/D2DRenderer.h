@@ -1,6 +1,7 @@
 #pragma once
 
 #include "model/AnalysisResultBuffer.h"
+#include "model/ToastBuffer.h"
 #include "render/OverlayPainter.h"
 
 #include <d2d1.h>
@@ -16,6 +17,10 @@ public:
     bool init(HWND hwnd, AnalysisResultBuffer& result_buffer);
     void upload_and_render(const cv::Mat& bgr);
     void notify_resize(UINT w, UINT h);
+
+    // 세션 시작 이후 set_session_start_ms / set_toast_buffer 호출 (렌더 스레드 안전)
+    void set_session_start_ms(std::uint64_t ms)  { overlay_.set_session_start_ms(ms); }
+    void set_toast_buffer(ToastBuffer* tb)        { overlay_.set_toast_buffer(tb); }
 
 private:
     bool recreate_target();
