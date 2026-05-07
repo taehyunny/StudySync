@@ -92,7 +92,7 @@ AnalysisResult make_result(int tick)
         r.absent       = false;
     }
 
-    r.guide = r.posture_ok ? "" : "목을 세워주세요";
+    r.guide = r.posture_ok ? "" : "Please sit up straight";
     return r;
 }
 
