@@ -39,9 +39,12 @@ AnalysisResult make_result(int tick)
         // ── 정상 집중 ──────────────────────────────
         r.state        = "focus";
         r.focus_score  = 82 + static_cast<int>(wobble);
+        r.ear          = 0.35 + wobble * 0.01;
         r.neck_angle   = 10.0 + wobble;
         r.shoulder_diff= 3.0 + std::abs(wobble) * 0.5;
-        r.ear          = 0.35f + static_cast<float>(wobble) * 0.01f;
+        r.head_yaw     = wobble * 2.0;
+        r.head_pitch   = wobble;
+        r.face_detected= 1;
         r.posture_ok   = true;
         r.drowsy       = false;
         r.absent       = false;
@@ -51,20 +54,26 @@ AnalysisResult make_result(int tick)
         const double t = (phase - TICKS_FOCUS_1) / static_cast<double>(TICKS_DROWSY);
         r.state        = "drowsy";
         r.focus_score  = 50 - static_cast<int>(t * 20);
+        r.ear          = 0.28 - t * 0.13;   // 점점 감김
         r.neck_angle   = 12.0 + t * 5.0;
         r.shoulder_diff= 4.0;
-        r.ear          = static_cast<float>(0.28 - t * 0.13); // 점점 감김
+        r.head_yaw     = wobble;
+        r.head_pitch   = t * 8.0;           // 점점 고개 숙임
+        r.face_detected= 1;
         r.posture_ok   = true;
-        r.drowsy       = (t > 0.4);   // 후반부터 drowsy flag
+        r.drowsy       = (t > 0.4);         // 후반부터 drowsy flag
         r.absent       = false;
 
     } else if (phase < TICKS_FOCUS_1 + TICKS_DROWSY + TICKS_BAD_POSTURE) {
         // ── 목 각도 초과 (자세 불량) ────────────────
         r.state        = "distracted";
         r.focus_score  = 60 + static_cast<int>(wobble);
+        r.ear          = 0.32;
         r.neck_angle   = 35.0 + wobble * 2.0;   // 임계값(보통 25) 초과
         r.shoulder_diff= 8.0 + std::abs(wobble);
-        r.ear          = 0.32f;
+        r.head_yaw     = wobble * 3.0;
+        r.head_pitch   = 15.0 + wobble;
+        r.face_detected= 1;
         r.posture_ok   = false;
         r.drowsy       = false;
         r.absent       = false;
@@ -73,9 +82,12 @@ AnalysisResult make_result(int tick)
         // ── 자리 비움 ───────────────────────────────
         r.state        = "absent";
         r.focus_score  = 0;
+        r.ear          = 0.0;
         r.neck_angle   = 0.0;
         r.shoulder_diff= 0.0;
-        r.ear          = 0.0f;
+        r.head_yaw     = 0.0;
+        r.head_pitch   = 0.0;
+        r.face_detected= 0;
         r.posture_ok   = false;
         r.drowsy       = false;
         r.absent       = true;
@@ -84,14 +96,18 @@ AnalysisResult make_result(int tick)
         // ── 복귀 / 정상 집중 ────────────────────────
         r.state        = "focus";
         r.focus_score  = 75 + static_cast<int>(wobble * 2);
+        r.ear          = 0.34;
         r.neck_angle   = 11.0 + wobble;
         r.shoulder_diff= 3.5;
-        r.ear          = 0.34f;
+        r.head_yaw     = wobble * 1.5;
+        r.head_pitch   = wobble * 0.5;
+        r.face_detected= 1;
         r.posture_ok   = true;
         r.drowsy       = false;
         r.absent       = false;
     }
 
+    r.confidence = 1.0;  // 더미: 신뢰도 최대값
     r.guide = r.posture_ok ? "" : "Please sit up straight";
     return r;
 }

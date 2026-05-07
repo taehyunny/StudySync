@@ -106,16 +106,19 @@ std::string JsonlBatchUploader::to_jsonl(const AnalysisResult& result) const
 {
     std::ostringstream out;
     out << "{\"kind\":\"analysis\""
-        << ",\"session_id\":"   << session_id_
-        << ",\"timestamp_ms\":" << result.timestamp_ms
-        << ",\"focus_score\":"  << result.focus_score
-        << ",\"state\":\""      << escape_json(result.state) << "\""
-        << ",\"neck_angle\":"   << result.neck_angle
+        << ",\"session_id\":"    << session_id_
+        << ",\"timestamp_ms\":"  << result.timestamp_ms
+        << ",\"focus_score\":"   << result.focus_score
+        << ",\"state\":\""       << escape_json(result.state) << "\""
+        << ",\"ear\":"           << result.ear
+        << ",\"neck_angle\":"    << result.neck_angle
         << ",\"shoulder_diff\":" << result.shoulder_diff
-        << ",\"ear\":"          << result.ear
-        << ",\"posture_ok\":"   << (result.posture_ok ? "true" : "false")
-        << ",\"drowsy\":"       << (result.drowsy     ? "true" : "false")
-        << ",\"absent\":"       << (result.absent     ? "true" : "false")
+        << ",\"head_yaw\":"      << result.head_yaw
+        << ",\"head_pitch\":"    << result.head_pitch
+        << ",\"face_detected\":" << result.face_detected
+        << ",\"posture_ok\":"    << (result.posture_ok ? "true" : "false")
+        << ",\"drowsy\":"        << (result.drowsy     ? "true" : "false")
+        << ",\"absent\":"        << (result.absent     ? "true" : "false")
         << "}";
     return out.str();
 }

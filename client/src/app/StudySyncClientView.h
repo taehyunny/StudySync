@@ -3,6 +3,8 @@
 #include "alert/AlertDispatchThread.h"
 #include "alert/AlertManager.h"
 #include "analysis/DummyAnalysisGenerator.h"
+#include "model/ServerStatsSnapshot.h"
+#include "model/SessionStatsHistory.h"
 #include "model/ToastBuffer.h"
 #include "capture/CaptureThread.h"
 #include "core/WorkerThreadPool.h"
@@ -16,8 +18,10 @@
 #include "network/HeartbeatClient.h"
 #include "network/LocalClipGarbageCollector.h"
 #include "network/SessionApi.h"
+#include "network/StatsApi.h"
 #include "render/RenderThread.h"
 
+#include <atomic>
 #include <mutex>
 #include <string>
 #include <vector>
@@ -44,9 +48,11 @@ protected:
     static constexpr UINT_PTR IDT_CALIB      = 1;  // 1초 카운트다운 타이머
     static constexpr UINT_PTR IDT_CALIB_HIDE = 2;  // 완료 후 1.5초 뒤 오버레이 숨김
     static constexpr UINT_PTR IDT_LOG_FLUSH  = 3;  // 분석 데이터 주기적 서버 전송
+    static constexpr UINT_PTR IDT_STATS_FETCH = 4; // Fetch server-side session stats.
 
     void begin_calibration();
     void finish_calibration();
+    void request_server_stats();
 
     std::mutex              calib_mtx_;
     std::vector<double>     calib_samples_;
@@ -60,10 +66,15 @@ private:
     EventQueue event_queue_;
     AlertQueue alert_queue_;
     AnalysisResultBuffer result_buffer_;
-    ToastBuffer toast_buffer_;              // AlertDispatchThread(쓰기) ↔ OverlayPainter(읽기)
+    ToastBuffer          toast_buffer_;      // AlertDispatchThread(쓰기) ↔ OverlayPainter(읽기)
+    SessionStatsHistory  stats_history_;    // result_callback(쓰기) ↔ OverlayPainter(읽기)
+
+    ServerStatsSnapshot  server_stats_;      // StatsApi(worker) -> OverlayPainter(render)
 
     ClientTransportConfig transport_config_;
     ClientTransports transports_;
+    StatsApi stats_api_;
+    std::atomic_bool stats_fetch_pending_{ false };
     long long session_id_ = 0;
     std::string session_start_time_;
     std::uint64_t session_start_steady_ms_ = 0;  // 세션 HUD 타이머용

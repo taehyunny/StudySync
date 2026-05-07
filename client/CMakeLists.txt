@@ -39,6 +39,7 @@ add_executable(StudySyncClient WIN32
     src/network/AuthApi.cpp
     src/network/TokenStore.cpp
     src/network/SessionApi.cpp
+    src/network/StatsApi.cpp
     src/alert/AlertManager.cpp
     src/alert/AlertDispatchThread.cpp
     src/analysis/DummyAnalysisGenerator.cpp
