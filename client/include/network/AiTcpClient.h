@@ -1,5 +1,6 @@
 #pragma once
 
+#include "analysis/LocalMediaPipePoseAnalyzer.h"
 #include "capture/CaptureThread.h"
 #include "event/EventQueue.h"
 #include "event/EventShadowBuffer.h"
@@ -14,20 +15,24 @@
 #include <vector>
 #include <winsock2.h>
 
-// Owns the client-to-AI TCP connection.
-// Responsibility:
-// - sample the latest send buffer frame
-// - encode it as JPEG
-// - send a length-prefixed JSON header + JPEG payload
-// - receive analysis JSON on the same socket
-// - update renderer/event detector state
+// AI 서버 TCP 클라이언트 (Stage 1 변경 후)
+//
+// 변경 전: JPEG 이미지(~100KB) → AI 서버 (5fps 한계)
+// 변경 후: keypoint JSON (~100B) → AI 서버 (30fps 가능)
+//
+// 흐름:
+//   CaptureThread → send_buffer_
+//     → LocalMediaPipePoseAnalyzer (클라이언트 로컬 keypoint 추출)
+//       → send_keypoint_packet() (JSON only, 바이너리 없음)
+//         → AI 서버 (TCN 시계열 분석)
+//           → recv_result_packet() (state / confidence / focus_score)
 class AiTcpClient {
 public:
     AiTcpClient(CaptureThread::SendFrameBuffer& send_buffer,
                 EventShadowBuffer& shadow_buffer,
                 EventQueue& event_queue,
                 AnalysisResultBuffer& result_buffer,
-                int jpeg_quality);
+                int /* jpeg_quality — Stage 1 이후 미사용 */);
     ~AiTcpClient();
 
     void start(const std::string& host, std::uint16_t port, long long session_id, int sample_interval);
@@ -41,14 +46,16 @@ private:
     SOCKET connect_to(const std::string& host, std::uint16_t port);
     void close_socket(SOCKET& socket);
 
-    bool send_frame_packet(SOCKET socket, const Frame& frame, long long session_id);
+    // Stage 1: JPEG 대신 keypoint JSON 전송 (바이너리 없음)
+    bool send_keypoint_packet(SOCKET socket, const AnalysisResult& kp,
+                              long long session_id, long long frame_id);
+
+    // AI 서버 응답 수신 (confidence 포함)
     bool recv_result_packet(SOCKET socket, AnalysisResult& out);
 
     static bool send_all(SOCKET socket, const char* data, int length);
     static bool recv_all(SOCKET socket, char* data, int length);
-    static bool send_json_with_binary(SOCKET socket,
-                                      const std::string& json,
-                                      const std::vector<unsigned char>& binary);
+    static bool send_json_only(SOCKET socket, const std::string& json);
 
     static std::string now_iso8601();
     static std::string extract_string(const std::string& json, const std::string& key);
@@ -61,7 +68,8 @@ private:
     AnalysisResultBuffer& result_buffer_;
     PostureEventDetector detector_;
 
-    int jpeg_quality_ = 80;
+    LocalMediaPipePoseAnalyzer pose_analyzer_;   // 클라이언트 로컬 keypoint 추출기
+
     std::atomic_bool running_{ false };
     std::atomic_bool connected_{ false };
     std::thread worker_;

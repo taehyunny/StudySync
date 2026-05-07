@@ -40,6 +40,7 @@ CStudySyncClientView::CStudySyncClientView()
     , worker_pool_(3)
     , transport_config_()
     , transports_(make_client_transports(transport_config_))
+    , stats_api_(WinHttpClient::instance())
     , capture_thread_(render_buffer_, send_buffer_, shadow_buffer_)
     , render_thread_(render_buffer_)
     , ai_tcp_client_(send_buffer_, shadow_buffer_, event_queue_, result_buffer_, transport_config_.jpeg_quality)
@@ -132,15 +133,37 @@ void CStudySyncClientView::finish_calibration()
 
 // ── 윈도우 메시지 ──────────────────────────────────────────────
 
+void CStudySyncClientView::request_server_stats()
+{
+    // Keep HTTP outside the render thread. The HUD reads only the cached snapshot.
+    if (stats_fetch_pending_.exchange(true)) {
+        return;
+    }
+
+    worker_pool_.enqueue([this] {
+        const ServerStatsSnapshot::Data data = stats_api_.today();
+        if (data.valid) {
+            server_stats_.update(data);
+        }
+        stats_fetch_pending_ = false;
+    });
+}
+
 int CStudySyncClientView::OnCreate(LPCREATESTRUCT lpCreateStruct)
 {
     if (CWnd::OnCreate(lpCreateStruct) == -1) return -1;
 
+    worker_pool_.start();
     capture_thread_.start(0, transport_config_.capture_fps);
     render_thread_.start(m_hWnd, result_buffer_);
 
-    // 토스트 버퍼 연결 (렌더 스레드 시작 직후, 렌더링 시작 전)
+    // 토스트 버퍼 / 통계 히스토리 연결 (렌더 스레드 시작 직후)
     render_thread_.set_toast_buffer(&toast_buffer_);
+    render_thread_.set_stats_history(&stats_history_);
+    render_thread_.set_server_stats(&server_stats_);
+
+    // 휴식 알림 오버레이용 렌더 스레드 연결
+    alert_dispatch_thread_.set_render_thread(&render_thread_);
 
     if (transport_config_.use_dummy_ai) {
         // AI 서버 없이 더미 분석결과로 전체 파이프라인 테스트
@@ -154,6 +177,9 @@ int CStudySyncClientView::OnCreate(LPCREATESTRUCT lpCreateStruct)
                     return;
                 }
             }
+
+            // 통계 히스토리 누적 (그래프용)
+            stats_history_.push(r);
 
             // 분석 데이터 로그 누적 (세션 활성 시에만)
             if (session_id_ > 0 && transports_.log_sink) {
@@ -182,6 +208,8 @@ int CStudySyncClientView::OnCreate(LPCREATESTRUCT lpCreateStruct)
     });
 
     clip_garbage_collector_.start();
+    request_server_stats();
+    SetTimer(IDT_STATS_FETCH, 60'000, nullptr);
     return 0;
 }
 
@@ -215,6 +243,7 @@ void CStudySyncClientView::OnDestroy()
     KillTimer(IDT_LOG_FLUSH);
     KillTimer(IDT_CALIB);
     KillTimer(IDT_CALIB_HIDE);
+    KillTimer(IDT_STATS_FETCH);
     if (transports_.log_sink) {
         transports_.log_sink->flush();  // 미전송 데이터 마지막으로 전송
     }
@@ -232,6 +261,7 @@ void CStudySyncClientView::OnDestroy()
     }
     render_thread_.stop();
     capture_thread_.stop();
+    worker_pool_.stop();
 
     CWnd::OnDestroy();
 }
@@ -271,6 +301,8 @@ void CStudySyncClientView::OnTimer(UINT_PTR nIDEvent)
         if (transports_.log_sink && session_id_ > 0) {
             transports_.log_sink->flush();
         }
+    } else if (nIDEvent == IDT_STATS_FETCH) {
+        request_server_stats();
     }
 
     CWnd::OnTimer(nIDEvent);

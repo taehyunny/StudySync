@@ -3,6 +3,15 @@
 
 #include <chrono>
 
+namespace {
+std::uint64_t now_steady_ms()
+{
+    using namespace std::chrono;
+    return static_cast<std::uint64_t>(
+        duration_cast<milliseconds>(steady_clock::now().time_since_epoch()).count());
+}
+} // namespace
+
 AlertDispatchThread::AlertDispatchThread(AlertQueue& alert_queue, ToastBuffer& toast_buffer)
     : alert_queue_(alert_queue)
     , toast_buffer_(toast_buffer)
@@ -52,10 +61,17 @@ void AlertDispatchThread::run()
 
 void AlertDispatchThread::show_popup(const Alert& alert)
 {
-    // D2D 렌더 루프가 ToastBuffer를 읽어 화면에 표시한다.
-    // "제목: 메시지" 형태로 합쳐서 4초간 노출.
+    // 1) 좌상단 토스트 (4초)
     const std::string text = alert.title + ": " + alert.message;
     toast_buffer_.post(text, 4000);
+
+    // 2) 졸음 / 자세 불량 → 중앙 휴식 권장 오버레이 (8초)
+    if (render_thread_ &&
+        (alert.type == AlertType::Drowsy || alert.type == AlertType::BadPosture))
+    {
+        const std::uint64_t expire = now_steady_ms() + 8000;
+        render_thread_->set_break_alert(expire);
+    }
 }
 
 void AlertDispatchThread::send_to_arduino(const Alert& alert)

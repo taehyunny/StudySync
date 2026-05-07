@@ -53,11 +53,17 @@ void OverlayPainter::release_resources()
     brush_timer_bg_.Reset();
     brush_calib_bg_.Reset();
     brush_calib_panel_.Reset();
+    brush_chart_line_.Reset();
+    brush_chart_bg_.Reset();
+    brush_break_bg_.Reset();
+    brush_break_panel_.Reset();
     fmt_label_.Reset();
     fmt_value_.Reset();
     fmt_score_.Reset();
     fmt_calib_count_.Reset();
     fmt_calib_msg_.Reset();
+    fmt_break_title_.Reset();
+    fmt_break_msg_.Reset();
 }
 
 bool OverlayPainter::ensure_resources(ID2D1RenderTarget* rt)
@@ -138,6 +144,32 @@ bool OverlayPainter::ensure_resources(ID2D1RenderTarget* rt)
                               fmt_calib_msg_.GetAddressOf());
     if (fmt_calib_msg_) fmt_calib_msg_->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_CENTER);
 
+    // 휴식 알림 제목 (22pt bold)
+    dwrite_->CreateTextFormat(font, nullptr,
+                              DWRITE_FONT_WEIGHT_BOLD,
+                              DWRITE_FONT_STYLE_NORMAL,
+                              DWRITE_FONT_STRETCH_NORMAL,
+                              22.0f,
+                              L"en-US",
+                              fmt_break_title_.GetAddressOf());
+    if (fmt_break_title_) fmt_break_title_->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_CENTER);
+
+    // 휴식 알림 메시지 (14pt)
+    dwrite_->CreateTextFormat(font, nullptr,
+                              DWRITE_FONT_WEIGHT_NORMAL,
+                              DWRITE_FONT_STYLE_NORMAL,
+                              DWRITE_FONT_STRETCH_NORMAL,
+                              14.0f,
+                              L"en-US",
+                              fmt_break_msg_.GetAddressOf());
+    if (fmt_break_msg_) fmt_break_msg_->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_CENTER);
+
+    // 통계 / 휴식 알림 전용 브러시
+    if (FAILED(rt->CreateSolidColorBrush(D2D1::ColorF(0.20f, 0.60f, 1.00f, 1.0f),  brush_chart_line_.GetAddressOf()))) return false;
+    if (FAILED(rt->CreateSolidColorBrush(D2D1::ColorF(0.05f, 0.05f, 0.10f, 0.82f), brush_chart_bg_.GetAddressOf()))) return false;
+    if (FAILED(rt->CreateSolidColorBrush(D2D1::ColorF(0.0f,  0.0f,  0.0f,  0.60f), brush_break_bg_.GetAddressOf()))) return false;
+    if (FAILED(rt->CreateSolidColorBrush(D2D1::ColorF(0.10f, 0.16f, 0.28f, 0.95f), brush_break_panel_.GetAddressOf()))) return false;
+
     initialized_ = true;
     return true;
 }
@@ -162,6 +194,25 @@ void OverlayPainter::draw(ID2D1RenderTarget* rt, const AnalysisResult& result)
         std::string toast_text;
         if (toast_buffer_->get_active(toast_text)) {
             draw_toast(rt, kLeft, next_y, toast_text);
+        }
+    }
+
+    // ── 좌하단: 통계 다이어그램 ───────────────────────────────
+    if (stats_history_) {
+        draw_stats_panel(rt);
+    }
+
+    // ── 휴식 권장 오버레이 (활성 시 최우선) ──────────────────
+    {
+        using namespace std::chrono;
+        const auto now_ms = static_cast<std::uint64_t>(
+            duration_cast<milliseconds>(
+                steady_clock::now().time_since_epoch()).count());
+        const std::uint64_t expire = break_alert_expire_ms_.load();
+        if (expire > 0 && now_ms < expire) {
+            draw_break_alert(rt);
+        } else if (expire > 0 && now_ms >= expire) {
+            break_alert_expire_ms_.store(0);  // 만료 시 자동 숨김
         }
     }
 
@@ -334,6 +385,161 @@ void OverlayPainter::draw_timer(ID2D1RenderTarget* rt, float x, float y)
     rt->FillRoundedRectangle(bg, brush_timer_bg_.Get());
 
     draw_text(rt, buf, x + 8.0f, y + 5.0f, kW - 10.0f, kH, fmt_value_.Get(), brush_white_.Get());
+}
+
+void OverlayPainter::draw_stats_panel(ID2D1RenderTarget* rt)
+{
+    if (!stats_history_ || !brush_chart_bg_ || !brush_chart_line_) return;
+
+    const SessionStatsHistory::Snapshot snap = stats_history_->snapshot();
+    if (snap.total < 2) return;  // 데이터 부족
+
+    const D2D1_SIZE_F size = rt->GetSize();
+
+    // ── 패널 크기 / 위치 (좌하단) ─────────────────────────────
+    constexpr float kPW   = 420.0f;
+    constexpr float kPH   = 110.0f;
+    constexpr float kMarg = 12.0f;
+    const float px = kMarg;
+    const float py = size.height - kPH - kMarg;
+
+    const D2D1_ROUNDED_RECT panel = D2D1::RoundedRect(
+        D2D1::RectF(px, py, px + kPW, py + kPH), 8.0f, 8.0f);
+    rt->FillRoundedRectangle(panel, brush_chart_bg_.Get());
+    rt->DrawRoundedRectangle(panel, brush_gray_.Get(), 0.6f);
+
+    // ── 라벨 ──────────────────────────────────────────────────
+    draw_text(rt, L"Session Stats",
+              px + 10.0f, py + 6.0f, 120.0f, 16.0f,
+              fmt_label_.Get(), brush_gray_.Get());
+
+    // ── 우측 통계 수치 ────────────────────────────────────────
+    constexpr float kChartW = 260.0f;
+    const float sx = px + kChartW + 16.0f;
+    float sy = py + 8.0f;
+
+    wchar_t buf[64];
+    swprintf_s(buf, L"Avg Focus : %d", snap.avg_focus);
+    draw_text(rt, buf, sx, sy, 140.0f, 16.0f, fmt_label_.Get(), brush_white_.Get());
+    sy += 20.0f;
+
+    swprintf_s(buf, L"Posture OK: %.0f%%", snap.posture_ok_pct * 100.0f);
+    ID2D1SolidColorBrush* posture_brush =
+        (snap.posture_ok_pct >= 0.8f) ? brush_green_.Get() :
+        (snap.posture_ok_pct >= 0.5f) ? brush_yellow_.Get() : brush_red_.Get();
+    draw_text(rt, buf, sx, sy, 140.0f, 16.0f, fmt_label_.Get(), posture_brush);
+    sy += 20.0f;
+
+    swprintf_s(buf, L"Events    : %d", snap.event_count);
+    draw_text(rt, buf, sx, sy, 140.0f, 16.0f, fmt_label_.Get(),
+              snap.event_count > 0 ? brush_orange_.Get() : brush_white_.Get());
+    sy += 20.0f;
+
+    swprintf_s(buf, L"Samples   : %d", snap.total);
+    draw_text(rt, buf, sx, sy, 140.0f, 16.0f, fmt_label_.Get(), brush_gray_.Get());
+
+    if (server_stats_) {
+        const ServerStatsSnapshot::Data server = server_stats_->snapshot();
+        if (server.valid) {
+            sy += 18.0f;
+            swprintf_s(buf, L"Today    : %d min", server.focus_min);
+            draw_text(rt, buf, sx, sy, 140.0f, 16.0f, fmt_label_.Get(), brush_white_.Get());
+
+            sy += 18.0f;
+            swprintf_s(buf, L"Srv Avg  : %.0f%%", server.avg_focus * 100.0);
+            draw_text(rt, buf, sx, sy, 140.0f, 16.0f, fmt_label_.Get(), brush_green_.Get());
+        }
+    }
+
+    // ── 꺾은선 그래프 영역 ────────────────────────────────────
+    constexpr float kChartH    = 72.0f;
+    const float chart_x = px + 10.0f;
+    const float chart_y = py + 26.0f;
+    const float chart_r = px + kChartW;
+    const float chart_b = py + kPH - 10.0f;
+
+    // 그리드 기준선 (50% 점선 느낌으로 회색 선)
+    const float mid_y = chart_y + kChartH * 0.5f;
+    rt->DrawLine(D2D1::Point2F(chart_x, mid_y),
+                 D2D1::Point2F(chart_r, mid_y),
+                 brush_gray_.Get(), 0.5f);
+
+    // 데이터 포인트 → 꺾은선
+    const auto& ch = snap.chart;
+    const int   n  = static_cast<int>(ch.size());
+    if (n < 2) return;
+
+    const float step = (chart_r - chart_x) / static_cast<float>(n - 1);
+
+    for (int i = 1; i < n; ++i) {
+        const float x0 = chart_x + step * (i - 1);
+        const float x1 = chart_x + step * i;
+        const float y0 = chart_b - (ch[i - 1] / 100.0f) * kChartH;
+        const float y1 = chart_b - (ch[i]     / 100.0f) * kChartH;
+
+        // 집중도에 따라 선 색상 변경
+        ID2D1SolidColorBrush* line_brush =
+            (ch[i] >= 70) ? brush_green_.Get() :
+            (ch[i] >= 40) ? brush_yellow_.Get() : brush_red_.Get();
+
+        rt->DrawLine(D2D1::Point2F(x0, y0), D2D1::Point2F(x1, y1),
+                     line_brush, 1.5f);
+    }
+
+    // 현재 값 강조 (마지막 점)
+    const float lx = chart_x + step * (n - 1);
+    const float ly = chart_b - (ch.back() / 100.0f) * kChartH;
+    rt->FillEllipse(D2D1::Ellipse(D2D1::Point2F(lx, ly), 3.5f, 3.5f),
+                    brush_chart_line_.Get());
+}
+
+void OverlayPainter::draw_break_alert(ID2D1RenderTarget* rt)
+{
+    if (!fmt_break_title_ || !fmt_break_msg_) return;
+
+    const D2D1_SIZE_F size = rt->GetSize();
+    const float cx = size.width  * 0.5f;
+    const float cy = size.height * 0.5f;
+
+    // 반투명 전체 덮기
+    rt->FillRectangle(D2D1::RectF(0, 0, size.width, size.height),
+                      brush_break_bg_.Get());
+
+    // 중앙 패널 (400 × 200)
+    constexpr float kPW = 400.0f;
+    constexpr float kPH = 200.0f;
+    const D2D1_ROUNDED_RECT panel = D2D1::RoundedRect(
+        D2D1::RectF(cx - kPW * 0.5f, cy - kPH * 0.5f,
+                    cx + kPW * 0.5f, cy + kPH * 0.5f),
+        14.0f, 14.0f);
+    rt->FillRoundedRectangle(panel, brush_break_panel_.Get());
+    rt->DrawRoundedRectangle(panel, brush_orange_.Get(), 1.5f);
+
+    // 아이콘 (느낌표 원)
+    rt->FillEllipse(
+        D2D1::Ellipse(D2D1::Point2F(cx, cy - 60.0f), 20.0f, 20.0f),
+        brush_orange_.Get());
+    draw_text(rt, L"!",
+              cx - 20.0f, cy - 74.0f, 40.0f, 30.0f,
+              fmt_calib_count_.Get(), brush_white_.Get());
+
+    // 제목
+    draw_text(rt, L"Time for a Break!",
+              cx - kPW * 0.5f, cy - 26.0f,
+              kPW, 28.0f, fmt_break_title_.Get(), brush_orange_.Get());
+
+    // 메시지
+    draw_text(rt, L"You've been studying hard. Please rest your eyes",
+              cx - kPW * 0.5f, cy + 12.0f,
+              kPW, 20.0f, fmt_break_msg_.Get(), brush_gray_.Get());
+    draw_text(rt, L"and take a short stretch break.",
+              cx - kPW * 0.5f, cy + 34.0f,
+              kPW, 20.0f, fmt_break_msg_.Get(), brush_gray_.Get());
+
+    // 하단 안내
+    draw_text(rt, L"(This message will disappear automatically)",
+              cx - kPW * 0.5f, cy + 72.0f,
+              kPW, 16.0f, fmt_label_.Get(), brush_gray_.Get());
 }
 
 void OverlayPainter::draw_calibration(ID2D1RenderTarget* rt, int countdown)

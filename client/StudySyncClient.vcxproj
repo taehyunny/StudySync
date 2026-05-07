@@ -74,6 +74,8 @@
     <ClInclude Include="include\model\AnalysisResultBuffer.h" />
     <ClInclude Include="include\model\Frame.h" />
     <ClInclude Include="include\model\PostureEvent.h" />
+    <ClInclude Include="include\model\ServerStatsSnapshot.h" />
+    <ClInclude Include="include\model\SessionStatsHistory.h" />
     <ClInclude Include="include\model\ToastBuffer.h" />
     <ClInclude Include="include\model\User.h" />
     <ClInclude Include="include\network\ConnectionState.h" />
@@ -91,6 +93,7 @@
     <ClInclude Include="include\network\LocalClaimCheckClipStore.h" />
     <ClInclude Include="include\network\LocalClipGarbageCollector.h" />
     <ClInclude Include="include\network\ReconnectPolicy.h" />
+    <ClInclude Include="include\network\StatsApi.h" />
     <ClInclude Include="include\network\TokenStore.h" />
     <ClInclude Include="include\network\WinHttpClient.h" />
     <ClInclude Include="include\network\ZmqFrameSender.h" />
@@ -140,6 +143,7 @@
     <ClCompile Include="src\network\LocalClipGarbageCollector.cpp" />
     <ClCompile Include="src\network\ReconnectPolicy.cpp" />
     <ClCompile Include="src\network\SessionApi.cpp" />
+    <ClCompile Include="src\network\StatsApi.cpp" />
     <ClCompile Include="src\network\TokenStore.cpp" />
     <ClCompile Include="src\network\WinHttpClient.cpp" />
     <ClCompile Include="src\network\ZmqFrameSender.cpp" />

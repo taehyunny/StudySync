@@ -1,9 +1,7 @@
 #include "pch.h"
 #include "network/AiTcpClient.h"
 
-#include <opencv2/imgcodecs.hpp>
 #include <ws2tcpip.h>
-
 #include <chrono>
 #include <sstream>
 #include <utility>
@@ -11,7 +9,8 @@
 #pragma comment(lib, "ws2_32.lib")
 
 namespace {
-constexpr int kProtoFramePush = 2000;
+// Stage 1: keypoint 전송 프로토콜 번호
+constexpr int kProtoKeypointPush  = 2000;
 constexpr int kProtoAnalysisResult = 2001;
 constexpr std::uint32_t kMaxJsonBytes = 64 * 1024;
 
@@ -27,16 +26,18 @@ AiTcpClient::AiTcpClient(CaptureThread::SendFrameBuffer& send_buffer,
                          EventShadowBuffer& shadow_buffer,
                          EventQueue& event_queue,
                          AnalysisResultBuffer& result_buffer,
-                         int jpeg_quality)
+                         int /* jpeg_quality — Stage 1 이후 미사용 */)
     : send_buffer_(send_buffer)
     , shadow_buffer_(shadow_buffer)
     , event_queue_(event_queue)
     , result_buffer_(result_buffer)
-    , jpeg_quality_(jpeg_quality)
 {
     detector_.set_callback([this](PostureEvent event) {
         event_queue_.push(std::move(event));
     });
+
+    // 클라이언트 로컬 MediaPipe 분석기 초기화
+    pose_analyzer_.initialize();
 
     WSADATA wsa{};
     const int rc = WSAStartup(MAKEWORD(2, 2), &wsa);
@@ -48,6 +49,7 @@ AiTcpClient::AiTcpClient(CaptureThread::SendFrameBuffer& send_buffer,
 AiTcpClient::~AiTcpClient()
 {
     stop();
+    pose_analyzer_.shutdown();
     WSACleanup();
 }
 
@@ -75,7 +77,9 @@ void AiTcpClient::run(std::string host,
 {
     if (sample_interval <= 0) sample_interval = 1;
 
-    log_ai_tcp("worker started");
+    log_ai_tcp("worker started (Stage1 keypoint mode)");
+
+    long long frame_id = 0;
 
     while (running_) {
         SOCKET socket = connect_to(host, port);
@@ -97,7 +101,7 @@ void AiTcpClient::run(std::string host,
                 continue;
             }
 
-            // Keep latency low by draining old frames and sending only the latest one.
+            // 오래된 프레임을 버리고 가장 최신 프레임만 처리
             Frame newer;
             while (send_buffer_.try_pop(newer)) {
                 frame = std::move(newer);
@@ -109,12 +113,21 @@ void AiTcpClient::run(std::string host,
             }
             frame_index = 0;
 
-            if (!send_frame_packet(socket, frame, session_id)) {
+            // ── Stage 1: 클라이언트에서 keypoint 추출 ────────────
+            const auto kp_opt = pose_analyzer_.analyze(frame);
+            if (!kp_opt.has_value()) {
+                continue;   // 빈 프레임이면 스킵
+            }
+            const AnalysisResult kp = kp_opt.value();
+
+            // ── keypoint JSON 전송 (JPEG 바이너리 없음) ───────────
+            if (!send_keypoint_packet(socket, kp, session_id, ++frame_id)) {
                 log_ai_tcp("send failed; reconnecting");
                 break;
             }
 
-            AnalysisResult result;
+            // ── AI 서버 응답 수신 (TCN 시계열 판정) ──────────────
+            AnalysisResult result = kp;   // keypoint는 클라이언트 값 그대로 보존
             if (!recv_result_packet(socket, result)) {
                 log_ai_tcp("receive failed; reconnecting");
                 break;
@@ -164,29 +177,31 @@ void AiTcpClient::close_socket(SOCKET& socket)
     }
 }
 
-bool AiTcpClient::send_frame_packet(SOCKET socket, const Frame& frame, long long session_id)
+// ── Stage 1: keypoint JSON 전송 (바이너리 없음) ─────────────────────────
+
+bool AiTcpClient::send_keypoint_packet(SOCKET socket,
+                                       const AnalysisResult& kp,
+                                       long long session_id,
+                                       long long frame_id)
 {
-    if (frame.mat.empty()) return true;
-
-    std::vector<unsigned char> jpeg;
-    const std::vector<int> params = { cv::IMWRITE_JPEG_QUALITY, jpeg_quality_ };
-    if (!cv::imencode(".jpg", frame.mat, jpeg, params)) {
-        log_ai_tcp("jpeg encode failed");
-        return true;
-    }
-
     std::ostringstream json;
     json << "{"
-         << "\"protocol_no\":" << kProtoFramePush
-         << ",\"session_id\":" << session_id
-         << ",\"timestamp_ms\":" << frame.timestamp_ms
-         << ",\"timestamp\":\"" << now_iso8601() << "\""
-         << ",\"image_format\":\"jpeg\""
-         << ",\"image_size\":" << jpeg.size()
+         << "\"protocol_no\":"   << kProtoKeypointPush
+         << ",\"session_id\":"   << session_id
+         << ",\"frame_id\":"     << frame_id
+         << ",\"timestamp_ms\":" << kp.timestamp_ms
+         << ",\"ear\":"          << kp.ear
+         << ",\"neck_angle\":"   << kp.neck_angle
+         << ",\"shoulder_diff\":" << kp.shoulder_diff
+         << ",\"head_yaw\":"     << kp.head_yaw
+         << ",\"head_pitch\":"   << kp.head_pitch
+         << ",\"face_detected\":" << kp.face_detected
          << "}";
 
-    return send_json_with_binary(socket, json.str(), jpeg);
+    return send_json_only(socket, json.str());
 }
+
+// ── AI 서버 응답 파싱 (confidence 포함) ─────────────────────────────────
 
 bool AiTcpClient::recv_result_packet(SOCKET socket, AnalysisResult& out)
 {
@@ -196,7 +211,7 @@ bool AiTcpClient::recv_result_packet(SOCKET socket, AnalysisResult& out)
     const std::uint32_t json_len =
         (static_cast<std::uint32_t>(header[0]) << 24) |
         (static_cast<std::uint32_t>(header[1]) << 16) |
-        (static_cast<std::uint32_t>(header[2]) << 8) |
+        (static_cast<std::uint32_t>(header[2]) << 8)  |
         static_cast<std::uint32_t>(header[3]);
 
     if (json_len == 0 || json_len > kMaxJsonBytes) return false;
@@ -209,39 +224,33 @@ bool AiTcpClient::recv_result_packet(SOCKET socket, AnalysisResult& out)
         return false;
     }
 
-    out.timestamp_ms = static_cast<std::uint64_t>(extract_number(json, "timestamp_ms"));
-    out.focus_score = static_cast<int>(extract_number(json, "focus_score"));
-    out.state = extract_string(json, "state");
-    out.guide = extract_string(json, "guide");
-    out.neck_angle = extract_number(json, "neck_angle");
-    out.shoulder_diff = extract_number(json, "shoulder_diff");
-    out.ear = extract_number(json, "ear", 1.0);
-    out.posture_ok = extract_bool(json, "posture_ok", true);
-    out.drowsy = extract_bool(json, "is_drowsy") || extract_bool(json, "drowsy");
-    out.absent = extract_bool(json, "is_absent") || extract_bool(json, "absent");
+    // AI 서버가 반환하는 필드만 덮어씀. keypoint는 send 시 이미 채워진 상태.
+    out.timestamp_ms  = static_cast<std::uint64_t>(extract_number(json, "timestamp_ms", static_cast<double>(out.timestamp_ms)));
+    out.focus_score   = static_cast<int>(extract_number(json, "focus_score"));
+    out.confidence    = extract_number(json, "confidence", 1.0);
+    out.state         = extract_string(json, "state");
+    out.guide         = extract_string(json, "guide");
+    out.posture_ok    = extract_bool(json, "posture_ok", true);
+    out.drowsy        = extract_bool(json, "is_drowsy") || extract_bool(json, "drowsy");
+    out.absent        = extract_bool(json, "is_absent")  || extract_bool(json, "absent");
 
     return true;
 }
 
-bool AiTcpClient::send_json_with_binary(SOCKET socket,
-                                        const std::string& json,
-                                        const std::vector<unsigned char>& binary)
+// ── 전송 헬퍼 ──────────────────────────────────────────────────────────
+
+bool AiTcpClient::send_json_only(SOCKET socket, const std::string& json)
 {
     const std::uint32_t len = static_cast<std::uint32_t>(json.size());
     unsigned char header[4] = {
         static_cast<unsigned char>((len >> 24) & 0xFF),
         static_cast<unsigned char>((len >> 16) & 0xFF),
-        static_cast<unsigned char>((len >> 8) & 0xFF),
-        static_cast<unsigned char>(len & 0xFF),
+        static_cast<unsigned char>((len >>  8) & 0xFF),
+        static_cast<unsigned char>( len        & 0xFF),
     };
 
     if (!send_all(socket, reinterpret_cast<const char*>(header), 4)) return false;
     if (!send_all(socket, json.data(), static_cast<int>(json.size()))) return false;
-    if (!binary.empty()) {
-        if (!send_all(socket, reinterpret_cast<const char*>(binary.data()), static_cast<int>(binary.size()))) {
-            return false;
-        }
-    }
     return true;
 }
 
@@ -267,21 +276,17 @@ bool AiTcpClient::recv_all(SOCKET socket, char* data, int length)
     return true;
 }
 
+// ── JSON 파싱 유틸 ──────────────────────────────────────────────────────
+
 std::string AiTcpClient::now_iso8601()
 {
     SYSTEMTIME st{};
     GetLocalTime(&st);
-
     char buffer[32]{};
-    snprintf(buffer,
-             sizeof(buffer),
+    snprintf(buffer, sizeof(buffer),
              "%04d-%02d-%02dT%02d:%02d:%02d+09:00",
-             st.wYear,
-             st.wMonth,
-             st.wDay,
-             st.wHour,
-             st.wMinute,
-             st.wSecond);
+             st.wYear, st.wMonth, st.wDay,
+             st.wHour, st.wMinute, st.wSecond);
     return buffer;
 }
 
@@ -322,7 +327,6 @@ double AiTcpClient::extract_number(const std::string& json, const std::string& k
             break;
         }
     }
-
     return value.empty() ? fallback : std::stod(value);
 }
 
@@ -335,7 +339,7 @@ bool AiTcpClient::extract_bool(const std::string& json, const std::string& key, 
     pos += pattern.size();
     while (pos < json.size() && json[pos] == ' ') ++pos;
 
-    if (json.compare(pos, 4, "true") == 0) return true;
+    if (json.compare(pos, 4, "true")  == 0) return true;
     if (json.compare(pos, 5, "false") == 0) return false;
     return fallback;
 }
