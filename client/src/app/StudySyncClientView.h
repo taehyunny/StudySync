@@ -7,8 +7,7 @@
 #include "event/EventQueue.h"
 #include "event/EventShadowBuffer.h"
 #include "model/AnalysisResultBuffer.h"
-#include "network/AiAnalyzeApi.h"
-#include "network/AiAnalyzeThread.h"
+#include "network/AiTcpClient.h"
 #include "network/ClientTransportConfig.h"
 #include "network/ClientTransportFactory.h"
 #include "network/EventUploadThread.h"
@@ -51,10 +50,9 @@ private:
 
     AlertManager alert_manager_;
     WorkerThreadPool worker_pool_;
-    AiAnalyzeApi ai_api_;
     CaptureThread capture_thread_;
     RenderThread render_thread_;
-    AiAnalyzeThread ai_analyze_thread_;
+    AiTcpClient ai_tcp_client_;
     EventUploadThread event_upload_thread_;
     AlertDispatchThread alert_dispatch_thread_;
     HeartbeatClient ai_heartbeat_;

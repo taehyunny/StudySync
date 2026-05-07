@@ -25,6 +25,7 @@ add_executable(StudySyncClient WIN32
     src/render/RenderThread.cpp
     src/render/OverlayPainter.cpp
     src/network/ConnectionState.cpp
+    src/network/AiTcpClient.cpp
     src/network/EventUploadThread.cpp
     src/network/HeartbeatClient.cpp
     src/network/ClientTransportConfig.cpp
