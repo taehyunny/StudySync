@@ -62,9 +62,11 @@ void SessionController::register_routes() {
                 send_404(res, "session not found");
                 return;
             }
+            // 클라 SessionApi.cpp 가 focus_min 을 INT 로 추출 → 반올림 정수로.
+            int focus_min_int = static_cast<int>(r.focus_min + 0.5);
             send_json(res, 200, {
                 {"code",          200},
-                {"focus_min",     r.focus_min},
+                {"focus_min",     focus_min_int},
                 {"avg_focus",     r.avg_focus},
                 {"goal_achieved", r.goal_achieved}
             });

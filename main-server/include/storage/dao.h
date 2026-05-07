@@ -71,10 +71,11 @@ public:
     explicit GoalDao(ConnectionPool& pool) : pool_(pool) {}
 
     struct GoalInfo {
-        int  daily_goal_min   = 120;   // schema DEFAULT
-        int  rest_interval_min = 50;
-        int  rest_duration_min = 10;
-        bool found              = false;
+        int         daily_goal_min   = 120;   // schema DEFAULT
+        int         rest_interval_min = 50;
+        int         rest_duration_min = 10;
+        std::string updated_at;               // YYYY-MM-DD HH:MM:SS (없으면 빈 문자열)
+        bool        found              = false;
     };
 
     /// 목표 저장/갱신. 성공 시 true.

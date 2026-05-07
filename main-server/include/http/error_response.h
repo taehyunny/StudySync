@@ -20,9 +20,11 @@ inline void send_json(httplib::Response& res, int status,
 
 inline void send_error(httplib::Response& res, int status,
                        const std::string& message) {
+    // 클라 AuthApi.cpp 가 message 없을 때 detail 로 fallback 하므로 alias 동시 박음.
     send_json(res, status, {
-        {"code", status},
-        {"message", message}
+        {"code",    status},
+        {"message", message},
+        {"detail",  message}
     });
 }
 
