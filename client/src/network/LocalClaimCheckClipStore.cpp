@@ -75,6 +75,7 @@ ClipRef LocalClaimCheckClipStore::store_clip(const PostureEvent& event)
              << ",\"clip_format\":\"jpeg_sequence\""
              << ",\"timestamp_ms\":" << event.timestamp_ms
              << ",\"reason\":\"" << escape_json(event.reason) << "\""
+             << ",\"confidence\":" << event.confidence
              << ",\"frame_count\":" << written
              << ",\"retention_days\":" << retention_days_
              << ",\"created_at_ms\":" << created_at

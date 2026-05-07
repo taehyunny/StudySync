@@ -9,7 +9,8 @@ public:
     ~CMainFrame() override = default;
 
 protected:
-    afx_msg int OnCreate(LPCREATESTRUCT lpCreateStruct);
+    afx_msg int  OnCreate(LPCREATESTRUCT lpCreateStruct);
+    afx_msg void OnClose();   // 세션 종료 시 복기 화면 표시
     DECLARE_MESSAGE_MAP()
 
 private:
