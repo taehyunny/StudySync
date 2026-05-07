@@ -39,6 +39,7 @@ private:
     static long long   extract_int64(const std::string& json, const std::string& key);
     static int         extract_int  (const std::string& json, const std::string& key);
     static float       extract_float(const std::string& json, const std::string& key);
+    static bool        extract_bool (const std::string& json, const std::string& key);
     static std::string extract_str  (const std::string& json, const std::string& key);
 
     WinHttpClient& http_;

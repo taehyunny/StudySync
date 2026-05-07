@@ -108,10 +108,16 @@ void CStudySyncClientView::OnDestroy()
         if (result.success) {
             // 종료 통계 디버그 출력 (추후 UI 표시 가능)
             std::ostringstream msg;
+            msg << std::fixed;
+            msg.precision(1);
             msg << "[StudySync] 세션 종료 — "
-                << "집중시간: " << result.focus_min << "분, "
-                << "평균집중도: " << static_cast<int>(result.avg_focus * 100) << "%, "
-                << "목표달성: " << (result.goal_achieved ? "Y" : "N") << "\n";
+                << "집중시간: "  << result.focus_min               << "분, "
+                << "평균집중도: " << result.avg_focus * 100.0f      << "%, "
+                << "목표달성: "  << (result.goal_achieved ? "Y" : "N") << "\n";
+            OutputDebugStringA(msg.str().c_str());
+        } else {
+            std::ostringstream msg;
+            msg << "[StudySync] 세션 종료 실패 (HTTP " << result.success << ") " << result.message << "\n";
             OutputDebugStringA(msg.str().c_str());
         }
         session_id_ = 0;

@@ -33,10 +33,10 @@ SessionEndResult SessionApi::end(long long session_id, const std::string& iso_en
 
     SessionEndResult result;
     result.success       = resp.ok();
-    result.focus_min     = extract_int(resp.body, "focus_min");
-    result.avg_focus     = extract_float(resp.body, "avg_focus");
-    result.goal_achieved = extract_str(resp.body, "goal_achieved") == "true";
-    result.message       = extract_str(resp.body, "message");
+    result.focus_min     = extract_int  (resp.body, "focus_min");     // INT
+    result.avg_focus     = extract_float(resp.body, "avg_focus");     // float (0.0~1.0)
+    result.goal_achieved = extract_bool (resp.body, "goal_achieved"); // bool (true/false 리터럴)
+    result.message       = extract_str  (resp.body, "message");
     return result;
 }
 
@@ -91,6 +91,18 @@ float SessionApi::extract_float(const std::string& json, const std::string& key)
         else break;
     }
     return val.empty() ? 0.0f : std::stof(val);
+}
+
+bool SessionApi::extract_bool(const std::string& json, const std::string& key)
+{
+    // "key":true  또는  "key":false  형태 파싱 (따옴표 없음)
+    const std::string pat = "\"" + key + "\":";
+    auto pos = json.find(pat);
+    if (pos == std::string::npos) return false;
+
+    pos += pat.size();
+    while (pos < json.size() && json[pos] == ' ') ++pos;
+    return json.compare(pos, 4, "true") == 0;
 }
 
 std::string SessionApi::extract_str(const std::string& json, const std::string& key)
