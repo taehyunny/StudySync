@@ -81,6 +81,7 @@
     <ClInclude Include="include\model\ToastBuffer.h" />
     <ClInclude Include="include\model\User.h" />
     <ClInclude Include="include\network\ConsentStore.h" />
+    <ClInclude Include="include\network\FeedbackApi.h" />
     <ClInclude Include="include\network\ConnectionState.h" />
     <ClInclude Include="include\network\EventUploadThread.h" />
     <ClInclude Include="include\network\ClientTransportConfig.h" />
@@ -138,6 +139,7 @@
     <ClCompile Include="src\network\ZmqRecvThread.cpp" />
     <ClCompile Include="src\network\ZmqSendThread.cpp" />
     <ClCompile Include="src\network\ConsentStore.cpp" />
+    <ClCompile Include="src\network\FeedbackApi.cpp" />
     <ClCompile Include="src\network\EventUploadThread.cpp" />
     <ClCompile Include="src\network\HeartbeatClient.cpp" />
     <ClCompile Include="src\network\ClientTransportConfig.cpp" />
