@@ -8,6 +8,14 @@ void EventShadowBuffer::push(const Frame& frame)
 
 std::vector<Frame> EventShadowBuffer::snapshot(std::size_t window_size) const
 {
-    return buf_.snapshot(window_size);
+    std::vector<Frame> frames = buf_.snapshot(window_size);
+    for (auto& frame : frames) {
+        if (!frame.mat.empty()) {
+            // Event clips are written later on another thread, so keep an
+            // independent copy instead of sharing cv::Mat's reference-counted
+            // image memory with the live ring buffer.
+            frame.mat = frame.mat.clone();
+        }
+    }
+    return frames;
 }
-

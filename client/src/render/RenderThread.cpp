@@ -11,12 +11,12 @@ RenderThread::~RenderThread()
     stop();
 }
 
-void RenderThread::start(HWND hwnd)
+void RenderThread::start(HWND hwnd, AnalysisResultBuffer& result_buffer)
 {
     if (running_.exchange(true)) {
         return;
     }
-    worker_ = std::thread(&RenderThread::run, this, hwnd);
+    worker_ = std::thread(&RenderThread::run, this, hwnd, &result_buffer);
 }
 
 void RenderThread::stop()
@@ -33,9 +33,9 @@ void RenderThread::notify_resize(UINT w, UINT h)
     renderer_.notify_resize(w, h);
 }
 
-void RenderThread::run(HWND hwnd)
+void RenderThread::run(HWND hwnd, AnalysisResultBuffer* result_buffer)
 {
-    if (!renderer_.init(hwnd)) {
+    if (!renderer_.init(hwnd, *result_buffer)) {
         running_ = false;
         return;
     }

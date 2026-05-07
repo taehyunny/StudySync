@@ -43,6 +43,7 @@
 #include "http/controllers/session_controller.h"
 #include "http/controllers/stats_controller.h"
 #include "http/controllers/log_controller.h"
+#include "http/controllers/log_ingest_controller.h"
 #include "Protocol.h"
 
 #include <atomic>
@@ -138,13 +139,15 @@ int main(int argc, char* argv[]) {
     http::GoalController    goal_ctrl(http_server, jwt_mw, goal_service);
     http::SessionController session_ctrl(http_server, jwt_mw, session_service);
     http::StatsController   stats_ctrl(http_server, jwt_mw, stats_service);
-    http::LogController     log_ctrl(http_server, jwt_mw, log_service);
+    http::LogController       log_ctrl(http_server, jwt_mw, log_service);
+    http::LogIngestController ingest_ctrl(http_server, jwt_mw, log_service);
 
     auth_ctrl.register_routes();
     goal_ctrl.register_routes();
     session_ctrl.register_routes();
     stats_ctrl.register_routes();
     log_ctrl.register_routes();
+    ingest_ctrl.register_routes();
 
     http_server.start();
 

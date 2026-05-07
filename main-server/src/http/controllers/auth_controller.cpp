@@ -85,15 +85,20 @@ void AuthController::register_routes() {
 
             if (r.code == UserService::Code::Ok) {
                 send_json(res, status, {
-                    {"code",    status},
-                    {"token",   r.token},
-                    {"user_id", r.user_id},
-                    {"name",    r.name}
+                    {"code",         status},
+                    // 클라 AuthApi.cpp 가 "access_token" 으로 추출. 호환을 위해 둘 다 박음.
+                    {"access_token", r.token},
+                    {"token",        r.token},
+                    {"user_id",      r.user_id},
+                    {"name",         r.name}
                 });
             } else {
+                const char* msg = code_to_message(r.code);
                 send_json(res, status, {
                     {"code",    status},
-                    {"message", code_to_message(r.code)}
+                    {"message", msg},
+                    // 클라 AuthApi.cpp 가 message 비어있으면 "detail" 로 fallback. 동일 메시지 alias.
+                    {"detail",  msg}
                 });
             }
         } catch (const std::exception& e) {

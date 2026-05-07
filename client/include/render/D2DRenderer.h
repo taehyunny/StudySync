@@ -1,5 +1,9 @@
 #pragma once
 
+#include "model/AnalysisResultBuffer.h"
+#include "model/ToastBuffer.h"
+#include "render/OverlayPainter.h"
+
 #include <d2d1.h>
 #include <d2d1helper.h>
 #include <mutex>
@@ -10,9 +14,13 @@ class D2DRenderer {
 public:
     ~D2DRenderer() = default;
 
-    bool init(HWND hwnd);
+    bool init(HWND hwnd, AnalysisResultBuffer& result_buffer);
     void upload_and_render(const cv::Mat& bgr);
     void notify_resize(UINT w, UINT h);
+
+    // 세션 시작 이후 set_session_start_ms / set_toast_buffer 호출 (렌더 스레드 안전)
+    void set_session_start_ms(std::uint64_t ms)  { overlay_.set_session_start_ms(ms); }
+    void set_toast_buffer(ToastBuffer* tb)        { overlay_.set_toast_buffer(tb); }
 
 private:
     bool recreate_target();
@@ -31,4 +39,7 @@ private:
     UINT       pending_w_      = 0;
     UINT       pending_h_      = 0;
     bool       resize_pending_ = false;
+
+    AnalysisResultBuffer* result_buffer_ = nullptr;   // 공유 버퍼 (비소유)
+    OverlayPainter        overlay_;
 };

@@ -1,5 +1,10 @@
 #include "pch.h"
 #include "StudySyncClientView.h"
+#include "network/WinHttpClient.h"
+
+#include <chrono>
+#include <windows.h>
+#include <sstream>
 
 #ifdef _DEBUG
 #define new DEBUG_NEW
@@ -13,6 +18,22 @@ BEGIN_MESSAGE_MAP(CStudySyncClientView, CWnd)
     ON_WM_SIZE()
 END_MESSAGE_MAP()
 
+// ── 내부 유틸 ──────────────────────────────────────────────────
+namespace {
+std::string current_iso8601()
+{
+    SYSTEMTIME st;
+    GetLocalTime(&st);
+    char buf[32];
+    snprintf(buf, sizeof(buf), "%04d-%02d-%02dT%02d:%02d:%02d+09:00",
+             st.wYear, st.wMonth, st.wDay,
+             st.wHour, st.wMinute, st.wSecond);
+    return buf;
+}
+} // namespace
+
+// ── 생성 ───────────────────────────────────────────────────────
+
 CStudySyncClientView::CStudySyncClientView()
     : alert_manager_(alert_queue_)
     , worker_pool_(3)
@@ -20,10 +41,14 @@ CStudySyncClientView::CStudySyncClientView()
     , transports_(make_client_transports(transport_config_))
     , capture_thread_(render_buffer_, send_buffer_, shadow_buffer_)
     , render_thread_(render_buffer_)
-    , zmq_send_thread_(send_buffer_, *transports_.frame_sender)
-    , zmq_recv_thread_(shadow_buffer_, event_queue_)
+    , ai_tcp_client_(send_buffer_, shadow_buffer_, event_queue_, result_buffer_, transport_config_.jpeg_quality)
+    , dummy_generator_(result_buffer_, shadow_buffer_, event_queue_)
     , event_upload_thread_(event_queue_, *transports_.clip_store, *transports_.log_sink)
-    , alert_dispatch_thread_(alert_queue_)
+    , alert_dispatch_thread_(alert_queue_, toast_buffer_)
+    , ai_heartbeat_("AI Server",    transport_config_.ai_server_host + ":9100")
+    , main_heartbeat_("Main Server", transport_config_.main_server_url)
+    , clip_garbage_collector_(transport_config_.clip_directory,
+                              transport_config_.local_clip_retention_days)
 {
 }
 
@@ -31,43 +56,117 @@ CStudySyncClientView::~CStudySyncClientView()
 {
 }
 
-int CStudySyncClientView::OnCreate(LPCREATESTRUCT lpCreateStruct)
+// ── 공개 인터페이스 ────────────────────────────────────────────
+
+void CStudySyncClientView::set_session_id(long long session_id,
+                                          const std::string& start_time)
 {
-    if (CWnd::OnCreate(lpCreateStruct) == -1) {
-        return -1;
+    session_id_         = session_id;
+    session_start_time_ = start_time;
+
+    // JSONL 로그 라인에 session_id 포함
+    if (transports_.log_sink) {
+        transports_.log_sink->set_session_id(session_id);
     }
 
-    capture_thread_.start(0);
-    render_thread_.start(m_hWnd);
-    zmq_recv_thread_.start(transport_config_.zmq_pull_endpoint);
-    zmq_send_thread_.start(transport_config_.frame_sample_interval);
+    // 세션 타이머 시작 (steady_clock 기준)
+    session_start_steady_ms_ = static_cast<std::uint64_t>(
+        std::chrono::duration_cast<std::chrono::milliseconds>(
+            std::chrono::steady_clock::now().time_since_epoch()).count());
+    render_thread_.set_session_start_ms(session_start_steady_ms_);
+}
+
+// ── 윈도우 메시지 ──────────────────────────────────────────────
+
+int CStudySyncClientView::OnCreate(LPCREATESTRUCT lpCreateStruct)
+{
+    if (CWnd::OnCreate(lpCreateStruct) == -1) return -1;
+
+    capture_thread_.start(0, transport_config_.capture_fps);
+    render_thread_.start(m_hWnd, result_buffer_);
+
+    // 토스트 버퍼 연결 (렌더 스레드 시작 직후, 렌더링 시작 전)
+    render_thread_.set_toast_buffer(&toast_buffer_);
+
+    if (transport_config_.use_dummy_ai) {
+        // AI 서버 없이 더미 분석결과로 전체 파이프라인 테스트
+        // AlertManager 콜백 등록 → 자세/졸음 감지 시 toast_buffer_에 기록
+        dummy_generator_.set_result_callback([this](const AnalysisResult& r) {
+            alert_manager_.feed_local_analysis(r);
+        });
+        dummy_generator_.start(transport_config_.dummy_interval_ms);
+    } else {
+        ai_tcp_client_.start(
+            transport_config_.ai_server_host,
+            transport_config_.ai_server_port,
+            session_id_,
+            transport_config_.frame_sample_interval);
+    }
+
     event_upload_thread_.start();
     alert_dispatch_thread_.start();
 
+    ai_heartbeat_.start([this] {
+        return ai_tcp_client_.is_connected();
+    });
+    main_heartbeat_.start([this] {
+        return transports_.log_sink && transports_.log_sink->health_check();
+    });
+
+    clip_garbage_collector_.start();
     return 0;
 }
 
 void CStudySyncClientView::OnDestroy()
 {
+    // ── 세션 종료 먼저 (스레드 종료 전에 호출) ──────────────
+    if (session_id_ > 0) {
+        const std::string end_time = current_iso8601();
+        SessionApi session_api(WinHttpClient::instance());
+        const SessionEndResult result = session_api.end(session_id_, end_time);
+
+        if (result.success) {
+            // 종료 통계 디버그 출력 (추후 UI 표시 가능)
+            std::ostringstream msg;
+            msg << std::fixed;
+            msg.precision(1);
+            msg << "[StudySync] 세션 종료 — "
+                << "집중시간: "  << result.focus_min               << "분, "
+                << "평균집중도: " << result.avg_focus * 100.0f      << "%, "
+                << "목표달성: "  << (result.goal_achieved ? "Y" : "N") << "\n";
+            OutputDebugStringA(msg.str().c_str());
+        } else {
+            std::ostringstream msg;
+            msg << "[StudySync] 세션 종료 실패 (HTTP " << result.success << ") " << result.message << "\n";
+            OutputDebugStringA(msg.str().c_str());
+        }
+        session_id_ = 0;
+    }
+
+    // ── 스레드 종료 (시작 역순) ──────────────────────────────
+    clip_garbage_collector_.stop();
+    main_heartbeat_.stop();
+    ai_heartbeat_.stop();
     alert_dispatch_thread_.stop();
     event_upload_thread_.stop();
-    zmq_recv_thread_.stop();
-    zmq_send_thread_.stop();
+    if (transport_config_.use_dummy_ai) {
+        dummy_generator_.stop();
+    } else {
+        ai_tcp_client_.stop();
+    }
     render_thread_.stop();
     capture_thread_.stop();
+
     CWnd::OnDestroy();
 }
 
 void CStudySyncClientView::OnPaint()
 {
-    // D2D renders directly to this HWND on the render thread.
-    // Validate the paint request so GDI does not cover the D2D frame.
     ValidateRect(nullptr);
 }
 
 BOOL CStudySyncClientView::OnEraseBkgnd(CDC* /*pDC*/)
 {
-    // Prevent GDI background erase flicker. D2D clears the background.
     return TRUE;
 }
 

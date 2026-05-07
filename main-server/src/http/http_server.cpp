@@ -26,6 +26,15 @@ HttpServer::HttpServer(std::string host, int port)
         res.set_content("{\"code\":200,\"message\":\"ok\"}",
                         "application/json; charset=utf-8");
     });
+
+    // 모든 들어오는 요청 access log — 디버깅용 (어느 IP, 어떤 path)
+    server_.set_pre_routing_handler(
+        [](const httplib::Request& req, httplib::Response&) {
+            log_main("HTTP %s %s from %s (body=%zu)",
+                     req.method.c_str(), req.path.c_str(),
+                     req.remote_addr.c_str(), req.body.size());
+            return httplib::Server::HandlerResponse::Unhandled;
+        });
 }
 
 HttpServer::~HttpServer() {

@@ -1,0 +1,240 @@
+#include "pch.h"
+#include "network/WinHttpClient.h"
+
+#include <sstream>
+#include <vector>
+
+#pragma comment(lib, "winhttp.lib")
+
+WinHttpClient& WinHttpClient::instance()
+{
+    static WinHttpClient inst;
+    return inst;
+}
+
+WinHttpClient::WinHttpClient()
+{
+    session_ = WinHttpOpen(
+        L"StudySyncClient/1.0",
+        WINHTTP_ACCESS_TYPE_DEFAULT_PROXY,
+        WINHTTP_NO_PROXY_NAME,
+        WINHTTP_NO_PROXY_BYPASS,
+        0);
+}
+
+WinHttpClient::~WinHttpClient()
+{
+    if (session_) {
+        WinHttpCloseHandle(session_);
+    }
+}
+
+void WinHttpClient::set_base_url(const std::string& base_url)
+{
+    std::lock_guard<std::mutex> lock(mtx_);
+    base_url_ = base_url;
+}
+
+void WinHttpClient::set_token(const std::string& jwt)
+{
+    std::lock_guard<std::mutex> lock(mtx_);
+    token_ = jwt;
+}
+
+void WinHttpClient::clear_token()
+{
+    std::lock_guard<std::mutex> lock(mtx_);
+    token_.clear();
+}
+
+HttpResponse WinHttpClient::get(const std::string& path)
+{
+    return send_request(L"GET", path, {}, nullptr);
+}
+
+HttpResponse WinHttpClient::post_json(const std::string& path, const std::string& json_body)
+{
+    return send_request(L"POST", path, json_body, L"application/json");
+}
+
+HttpResponse WinHttpClient::post_ndjson(const std::string& path, const std::string& ndjson_body)
+{
+    return send_request(L"POST", path, ndjson_body, L"application/x-ndjson");
+}
+
+WinHttpClient::UrlParts WinHttpClient::parse_base_url() const
+{
+    UrlParts parts;
+    std::string url = base_url_;
+
+    if (url.rfind("https://", 0) == 0) {
+        parts.https = true;
+        url = url.substr(8);
+        parts.port = 443;
+    } else if (url.rfind("http://", 0) == 0) {
+        url = url.substr(7);
+        parts.port = 80;
+    }
+
+    // host:port 분리
+    auto colon = url.find(':');
+    if (colon != std::string::npos) {
+        parts.host = to_wide(url.substr(0, colon));
+        parts.port = static_cast<std::uint16_t>(std::stoi(url.substr(colon + 1)));
+    } else {
+        parts.host = to_wide(url);
+    }
+
+    return parts;
+}
+
+HttpResponse WinHttpClient::send_request(
+    const wchar_t* verb,
+    const std::string& path,
+    const std::string& body,
+    const wchar_t* content_type)
+{
+    HttpResponse resp;
+
+    if (!session_) {
+        return resp;
+    }
+
+    UrlParts parts;
+    std::string token_copy;
+    {
+        std::lock_guard<std::mutex> lock(mtx_);
+        parts = parse_base_url();
+        token_copy = token_;
+    }
+
+    // 연결 대상 디버그 출력 (요청이 어디로 가는지 확인용)
+    {
+        char dbg[256];
+        std::string host_utf8 = to_utf8(parts.host.c_str(), static_cast<int>(parts.host.size()));
+        snprintf(dbg, sizeof(dbg),
+            "[WinHttp] -> %s:%d%s\n",
+            host_utf8.c_str(), parts.port, path.c_str());
+        OutputDebugStringA(dbg);
+    }
+
+    HINTERNET connect = WinHttpConnect(
+        session_, parts.host.c_str(), parts.port, 0);
+    if (!connect) {
+        char dbg[256];
+        snprintf(dbg, sizeof(dbg),
+            "[WinHttp] Connect FAILED  host=%s  port=%d  err=0x%08X\n",
+            path.c_str(), parts.port, static_cast<unsigned>(GetLastError()));
+        OutputDebugStringA(dbg);
+        return resp;
+    }
+
+    DWORD flags = parts.https ? WINHTTP_FLAG_SECURE : 0;
+    std::wstring wide_path = to_wide(path);
+
+    HINTERNET request = WinHttpOpenRequest(
+        connect, verb, wide_path.c_str(),
+        nullptr, WINHTTP_NO_REFERER,
+        WINHTTP_DEFAULT_ACCEPT_TYPES, flags);
+    if (!request) {
+        WinHttpCloseHandle(connect);
+        return resp;
+    }
+
+    // JWT Bearer 토큰 주입
+    if (!token_copy.empty()) {
+        std::wstring auth_header = L"Authorization: Bearer " + to_wide(token_copy);
+        WinHttpAddRequestHeaders(request, auth_header.c_str(),
+            static_cast<DWORD>(auth_header.size()), WINHTTP_ADDREQ_FLAG_ADD);
+    }
+
+    // Content-Type 헤더
+    if (content_type) {
+        std::wstring ct_header = std::wstring(L"Content-Type: ") + content_type;
+        WinHttpAddRequestHeaders(request, ct_header.c_str(),
+            static_cast<DWORD>(ct_header.size()), WINHTTP_ADDREQ_FLAG_ADD);
+    }
+
+    BOOL sent = WinHttpSendRequest(
+        request,
+        WINHTTP_NO_ADDITIONAL_HEADERS, 0,
+        body.empty() ? WINHTTP_NO_REQUEST_DATA : const_cast<char*>(body.data()),
+        static_cast<DWORD>(body.size()),
+        static_cast<DWORD>(body.size()),
+        0);
+
+    if (!sent) {
+        char dbg[256];
+        snprintf(dbg, sizeof(dbg),
+            "[WinHttp] SendRequest FAILED  path=%s  err=0x%08X\n",
+            path.c_str(), static_cast<unsigned>(GetLastError()));
+        OutputDebugStringA(dbg);
+        WinHttpCloseHandle(request);
+        WinHttpCloseHandle(connect);
+        return resp;
+    }
+
+    if (!WinHttpReceiveResponse(request, nullptr)) {
+        char dbg[256];
+        snprintf(dbg, sizeof(dbg),
+            "[WinHttp] ReceiveResponse FAILED  path=%s  err=0x%08X\n",
+            path.c_str(), static_cast<unsigned>(GetLastError()));
+        OutputDebugStringA(dbg);
+        WinHttpCloseHandle(request);
+        WinHttpCloseHandle(connect);
+        return resp;
+    }
+
+    // 상태 코드 읽기
+    DWORD status_code = 0;
+    DWORD size = sizeof(status_code);
+    WinHttpQueryHeaders(request,
+        WINHTTP_QUERY_STATUS_CODE | WINHTTP_QUERY_FLAG_NUMBER,
+        WINHTTP_HEADER_NAME_BY_INDEX, &status_code, &size,
+        WINHTTP_NO_HEADER_INDEX);
+    resp.status_code = static_cast<int>(status_code);
+
+    // 응답 본문 읽기
+    std::ostringstream response_body;
+    DWORD bytes_available = 0;
+    while (WinHttpQueryDataAvailable(request, &bytes_available) && bytes_available > 0) {
+        std::vector<char> buf(bytes_available);
+        DWORD bytes_read = 0;
+        if (WinHttpReadData(request, buf.data(), bytes_available, &bytes_read)) {
+            response_body.write(buf.data(), bytes_read);
+        }
+    }
+    resp.body = response_body.str();
+
+    // 응답 디버그 출력 (status + body 앞 300자)
+    {
+        char dbg[512];
+        const std::string preview = resp.body.substr(0, 300);
+        snprintf(dbg, sizeof(dbg),
+            "[WinHttp] <- %d  body=%s\n",
+            resp.status_code, preview.c_str());
+        OutputDebugStringA(dbg);
+    }
+
+    WinHttpCloseHandle(request);
+    WinHttpCloseHandle(connect);
+    return resp;
+}
+
+std::wstring WinHttpClient::to_wide(const std::string& s)
+{
+    if (s.empty()) return {};
+    int len = MultiByteToWideChar(CP_UTF8, 0, s.data(), static_cast<int>(s.size()), nullptr, 0);
+    std::wstring ws(len, 0);
+    MultiByteToWideChar(CP_UTF8, 0, s.data(), static_cast<int>(s.size()), ws.data(), len);
+    return ws;
+}
+
+std::string WinHttpClient::to_utf8(const wchar_t* ws, int len)
+{
+    if (!ws || len == 0) return {};
+    int size = WideCharToMultiByte(CP_UTF8, 0, ws, len, nullptr, 0, nullptr, nullptr);
+    std::string s(size, 0);
+    WideCharToMultiByte(CP_UTF8, 0, ws, len, s.data(), size, nullptr, nullptr);
+    return s;
+}

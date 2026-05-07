@@ -47,13 +47,15 @@
       <LanguageStandard>stdcpp17</LanguageStandard>
       <PrecompiledHeader>Use</PrecompiledHeader>
       <PrecompiledHeaderFile>pch.h</PrecompiledHeaderFile>
+      <AdditionalOptions>/utf-8 %(AdditionalOptions)</AdditionalOptions>
     </ClCompile>
     <Link>
       <AdditionalLibraryDirectories>$(OpenCVRoot)\x64\vc16\lib;$(ZMQ_DIR)\lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
-      <AdditionalDependencies>$(OpenCVWorldLib);d2d1.lib;dxgi.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>$(OpenCVWorldLib);d2d1.lib;dxgi.lib;winhttp.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClInclude Include="include\analysis\DummyAnalysisGenerator.h" />
     <ClInclude Include="include\analysis\IPoseAnalyzer.h" />
     <ClInclude Include="include\analysis\LocalMediaPipePoseAnalyzer.h" />
     <ClInclude Include="include\analysis\ZmqPoseAnalyzer.h" />
@@ -69,17 +71,28 @@
     <ClInclude Include="include\event\PostureEventDetector.h" />
     <ClInclude Include="include\model\AnalysisResult.h" />
     <ClInclude Include="include\model\Alert.h" />
+    <ClInclude Include="include\model\AnalysisResultBuffer.h" />
     <ClInclude Include="include\model\Frame.h" />
     <ClInclude Include="include\model\PostureEvent.h" />
+    <ClInclude Include="include\model\ToastBuffer.h" />
+    <ClInclude Include="include\model\User.h" />
+    <ClInclude Include="include\network\ConnectionState.h" />
     <ClInclude Include="include\network\EventUploadThread.h" />
     <ClInclude Include="include\network\ClientTransportConfig.h" />
     <ClInclude Include="include\network\ClientTransportFactory.h" />
+    <ClInclude Include="include\network\AiTcpClient.h" />
+    <ClInclude Include="include\network\HeartbeatClient.h" />
     <ClInclude Include="include\network\HttpJsonlLogSink.h" />
+    <ClInclude Include="include\network\AuthApi.h" />
     <ClInclude Include="include\network\IEventClipStore.h" />
     <ClInclude Include="include\network\IFrameSender.h" />
     <ClInclude Include="include\network\ILogSink.h" />
     <ClInclude Include="include\network\JsonlBatchUploader.h" />
     <ClInclude Include="include\network\LocalClaimCheckClipStore.h" />
+    <ClInclude Include="include\network\LocalClipGarbageCollector.h" />
+    <ClInclude Include="include\network\ReconnectPolicy.h" />
+    <ClInclude Include="include\network\TokenStore.h" />
+    <ClInclude Include="include\network\WinHttpClient.h" />
     <ClInclude Include="include\network\ZmqFrameSender.h" />
     <ClInclude Include="include\network\ZmqRecvThread.h" />
     <ClInclude Include="include\network\ZmqSendThread.h" />
@@ -95,28 +108,40 @@
     <ClInclude Include="src\app\targetver.h" />
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="src\analysis\DummyAnalysisGenerator.cpp" />
     <ClCompile Include="src\analysis\LocalMediaPipePoseAnalyzer.cpp" />
     <ClCompile Include="src\analysis\ZmqPoseAnalyzer.cpp" />
     <ClCompile Include="src\alert\AlertDispatchThread.cpp" />
     <ClCompile Include="src\alert\AlertManager.cpp" />
+    <ClCompile Include="src\app\LoginDlg.cpp" />
     <ClCompile Include="src\app\MainFrm.cpp" />
     <ClCompile Include="src\app\pch.cpp">
       <PrecompiledHeader>Create</PrecompiledHeader>
     </ClCompile>
+    <ClCompile Include="src\app\RegisterDlg.cpp" />
     <ClCompile Include="src\app\StudySyncClientApp.cpp" />
     <ClCompile Include="src\app\StudySyncClientView.cpp" />
     <ClCompile Include="src\capture\CaptureThread.cpp" />
     <ClCompile Include="src\core\WorkerThreadPool.cpp" />
     <ClCompile Include="src\event\EventShadowBuffer.cpp" />
     <ClCompile Include="src\event\PostureEventDetector.cpp" />
+    <ClCompile Include="src\network\AiTcpClient.cpp" />
+    <ClCompile Include="src\network\ConnectionState.cpp" />
     <ClCompile Include="src\network\ZmqRecvThread.cpp" />
     <ClCompile Include="src\network\ZmqSendThread.cpp" />
     <ClCompile Include="src\network\EventUploadThread.cpp" />
+    <ClCompile Include="src\network\HeartbeatClient.cpp" />
     <ClCompile Include="src\network\ClientTransportConfig.cpp" />
     <ClCompile Include="src\network\ClientTransportFactory.cpp" />
+    <ClCompile Include="src\network\AuthApi.cpp" />
     <ClCompile Include="src\network\HttpJsonlLogSink.cpp" />
     <ClCompile Include="src\network\JsonlBatchUploader.cpp" />
     <ClCompile Include="src\network\LocalClaimCheckClipStore.cpp" />
+    <ClCompile Include="src\network\LocalClipGarbageCollector.cpp" />
+    <ClCompile Include="src\network\ReconnectPolicy.cpp" />
+    <ClCompile Include="src\network\SessionApi.cpp" />
+    <ClCompile Include="src\network\TokenStore.cpp" />
+    <ClCompile Include="src\network\WinHttpClient.cpp" />
     <ClCompile Include="src\network\ZmqFrameSender.cpp" />
     <ClCompile Include="src\render\D2DRenderer.cpp" />
     <ClCompile Include="src\render\OverlayPainter.cpp" />

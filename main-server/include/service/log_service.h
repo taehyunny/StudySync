@@ -17,7 +17,7 @@ namespace factory {
 class LogService {
 public:
     explicit LogService(ConnectionPool& pool)
-        : focus_dao_(pool), posture_dao_(pool), session_dao_(pool) {}
+        : focus_dao_(pool), posture_dao_(pool), event_dao_(pool), session_dao_(pool) {}
 
     /// session 이 user_id 소유인지 확인. 컨트롤러에서 호출하여 무단 INSERT 차단.
     bool owns_session(long long user_id, long long session_id) {
@@ -26,13 +26,15 @@ public:
         return info.found && info.user_id == user_id;
     }
 
-    long long insert_focus(const FocusLogDao::Entry& e)     { return focus_dao_.insert(e); }
-    long long insert_posture(const PostureLogDao::Entry& e) { return posture_dao_.insert(e); }
+    long long insert_focus  (const FocusLogDao::Entry& e)     { return focus_dao_.insert(e); }
+    long long insert_posture(const PostureLogDao::Entry& e)   { return posture_dao_.insert(e); }
+    long long insert_event  (const PostureEventDao::Entry& e) { return event_dao_.insert(e); }
 
 private:
-    FocusLogDao   focus_dao_;
-    PostureLogDao posture_dao_;
-    SessionDao    session_dao_;
+    FocusLogDao     focus_dao_;
+    PostureLogDao   posture_dao_;
+    PostureEventDao event_dao_;
+    SessionDao      session_dao_;
 };
 
 } // namespace factory
