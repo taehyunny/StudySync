@@ -57,6 +57,11 @@ HttpResponse WinHttpClient::post_json(const std::string& path, const std::string
     return send_request(L"POST", path, json_body, L"application/json");
 }
 
+HttpResponse WinHttpClient::post_ndjson(const std::string& path, const std::string& ndjson_body)
+{
+    return send_request(L"POST", path, ndjson_body, L"application/x-ndjson");
+}
+
 WinHttpClient::UrlParts WinHttpClient::parse_base_url() const
 {
     UrlParts parts;
@@ -103,9 +108,24 @@ HttpResponse WinHttpClient::send_request(
         token_copy = token_;
     }
 
+    // 연결 대상 디버그 출력 (요청이 어디로 가는지 확인용)
+    {
+        char dbg[256];
+        std::string host_utf8 = to_utf8(parts.host.c_str(), static_cast<int>(parts.host.size()));
+        snprintf(dbg, sizeof(dbg),
+            "[WinHttp] -> %s:%d%s\n",
+            host_utf8.c_str(), parts.port, path.c_str());
+        OutputDebugStringA(dbg);
+    }
+
     HINTERNET connect = WinHttpConnect(
         session_, parts.host.c_str(), parts.port, 0);
     if (!connect) {
+        char dbg[256];
+        snprintf(dbg, sizeof(dbg),
+            "[WinHttp] Connect FAILED  host=%s  port=%d  err=0x%08X\n",
+            path.c_str(), parts.port, static_cast<unsigned>(GetLastError()));
+        OutputDebugStringA(dbg);
         return resp;
     }
 
@@ -143,7 +163,23 @@ HttpResponse WinHttpClient::send_request(
         static_cast<DWORD>(body.size()),
         0);
 
-    if (!sent || !WinHttpReceiveResponse(request, nullptr)) {
+    if (!sent) {
+        char dbg[256];
+        snprintf(dbg, sizeof(dbg),
+            "[WinHttp] SendRequest FAILED  path=%s  err=0x%08X\n",
+            path.c_str(), static_cast<unsigned>(GetLastError()));
+        OutputDebugStringA(dbg);
+        WinHttpCloseHandle(request);
+        WinHttpCloseHandle(connect);
+        return resp;
+    }
+
+    if (!WinHttpReceiveResponse(request, nullptr)) {
+        char dbg[256];
+        snprintf(dbg, sizeof(dbg),
+            "[WinHttp] ReceiveResponse FAILED  path=%s  err=0x%08X\n",
+            path.c_str(), static_cast<unsigned>(GetLastError()));
+        OutputDebugStringA(dbg);
         WinHttpCloseHandle(request);
         WinHttpCloseHandle(connect);
         return resp;
@@ -169,6 +205,16 @@ HttpResponse WinHttpClient::send_request(
         }
     }
     resp.body = response_body.str();
+
+    // 응답 디버그 출력 (status + body 앞 300자)
+    {
+        char dbg[512];
+        const std::string preview = resp.body.substr(0, 300);
+        snprintf(dbg, sizeof(dbg),
+            "[WinHttp] <- %d  body=%s\n",
+            resp.status_code, preview.c_str());
+        OutputDebugStringA(dbg);
+    }
 
     WinHttpCloseHandle(request);
     WinHttpCloseHandle(connect);

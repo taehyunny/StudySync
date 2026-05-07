@@ -2,7 +2,7 @@
   "network": {
     "main_server_ai_port": 9000,
     "http_host": "0.0.0.0",
-    "http_port": 8080,
+    "http_port": 8081,
     "training_server_host": "10.10.10.120",
     "training_server_port": 9100,
     "allowed_ip_prefixes": ["127.", "10.", "192.168.", "172."]
