@@ -538,19 +538,131 @@ SessionDao::AggregateResult SessionDao::aggregate(long long session_id) {
     return r;
 }
 
+// ---------------------------------------------------------------------------
+// force_close_user_open_sessions — 새 /session/start 호출 시 같은 user 의
+// 미종료 세션 (end_time IS NULL) 들을 강제 마감.
+// 클라가 비정상 종료되어 이전 세션이 매달려 있는 경우 정리용.
+// 마감 시 focus_logs / posture_logs 의 데이터로 집계해서 채움.
+// ---------------------------------------------------------------------------
+int SessionDao::force_close_user_open_sessions(long long user_id,
+                                                const std::string& end_time) {
+    if (user_id <= 0 || end_time.empty()) return 0;
+
+    PooledConnection conn(pool_);
+    if (!conn.get()) return 0;
+
+    // 1) 미종료 세션 ID 들 수집
+    std::vector<long long> orphan_ids;
+    {
+        MYSQL_STMT* stmt = mysql_stmt_init(conn);
+        if (!stmt) return 0;
+        const char* sel = "SELECT id FROM sessions WHERE user_id=? AND end_time IS NULL";
+        if (mysql_stmt_prepare(stmt, sel, std::strlen(sel)) == 0) {
+            MYSQL_BIND bp[1]; std::memset(bp, 0, sizeof(bp));
+            bind_longlong(bp[0], &user_id);
+            if (mysql_stmt_bind_param(stmt, bp) == 0 && mysql_stmt_execute(stmt) == 0) {
+                MYSQL_BIND br[1]; std::memset(br, 0, sizeof(br));
+                long long id = 0;
+                bind_longlong(br[0], &id);
+                mysql_stmt_bind_result(stmt, br);
+                while (mysql_stmt_fetch(stmt) == 0) orphan_ids.push_back(id);
+            }
+        }
+        mysql_stmt_close(stmt);
+    }
+
+    if (orphan_ids.empty()) return 0;
+
+    // 2) 각 세션에 대해 집계 + UPDATE
+    std::string ts_mysql = iso8601_to_mysql(end_time);
+    int closed = 0;
+    for (long long sid : orphan_ids) {
+        AggregateResult agg = aggregate(sid);
+        // goal_achieved 잠정: focus_min >= 1 분 이상이면 진행됐다고 봄.
+        // (정확한 정의는 SessionService 가 GoalDao 와 비교하는 건데, 자동 마감은
+        //  단순 처리 — 별도 cron 정리 수준이라 0 으로 둠)
+        bool goal_achieved = false;
+        if (end(sid, ts_mysql, agg.focus_min, agg.avg_focus, goal_achieved)) {
+            ++closed;
+        }
+    }
+    if (closed > 0) {
+        log_main("force_close_user_open_sessions | user=%lld closed=%d",
+                 user_id, closed);
+    }
+    return closed;
+}
+
+// ---------------------------------------------------------------------------
+// force_close_stale_sessions — SessionCleanupWorker 가 주기 호출.
+// start_time 후 stale_hours 시간 경과 + end_time NULL 인 세션 전체 강제 마감.
+// ---------------------------------------------------------------------------
+int SessionDao::force_close_stale_sessions(int stale_hours) {
+    if (stale_hours <= 0) stale_hours = 6;
+
+    PooledConnection conn(pool_);
+    if (!conn.get()) return 0;
+
+    // stale 세션 ID 수집
+    std::vector<long long> stale_ids;
+    {
+        MYSQL_STMT* stmt = mysql_stmt_init(conn);
+        if (!stmt) return 0;
+        const char* sel =
+            "SELECT id FROM sessions "
+            "WHERE end_time IS NULL AND start_time < NOW() - INTERVAL ? HOUR";
+        if (mysql_stmt_prepare(stmt, sel, std::strlen(sel)) == 0) {
+            MYSQL_BIND bp[1]; std::memset(bp, 0, sizeof(bp));
+            bind_long(bp[0], &stale_hours);
+            if (mysql_stmt_bind_param(stmt, bp) == 0 && mysql_stmt_execute(stmt) == 0) {
+                MYSQL_BIND br[1]; std::memset(br, 0, sizeof(br));
+                long long id = 0;
+                bind_longlong(br[0], &id);
+                mysql_stmt_bind_result(stmt, br);
+                while (mysql_stmt_fetch(stmt) == 0) stale_ids.push_back(id);
+            }
+        }
+        mysql_stmt_close(stmt);
+    }
+
+    if (stale_ids.empty()) return 0;
+
+    // 각 세션 마감 — end_time = NOW() (세션 길이 stale_hours 초과라 정확한 종료 시각 모름).
+    // 더 정밀하게는 마지막 focus_log ts 사용 가능하나 비용 큼.
+    int closed = 0;
+    for (long long sid : stale_ids) {
+        AggregateResult agg = aggregate(sid);
+        // end() 가 ISO/DATETIME 둘 다 받으니 NOW() 형식 그대로 패스
+        std::time_t now = std::time(nullptr);
+        std::tm tm{}; localtime_r(&now, &tm);
+        char buf[32];
+        std::strftime(buf, sizeof(buf), "%Y-%m-%d %H:%M:%S", &tm);
+        if (end(sid, std::string(buf), agg.focus_min, agg.avg_focus, /*goal_achieved=*/false)) {
+            ++closed;
+        }
+    }
+    log_main("force_close_stale_sessions | stale_hours=%d closed=%d",
+             stale_hours, closed);
+    return closed;
+}
+
 // ============================================================================
 // FocusLogDao — focus_logs 테이블
 // ============================================================================
 
 long long FocusLogDao::insert(const Entry& e) {
+    PooledConnection conn(pool_);
+    if (!conn.get()) return -1;
+    return insert_in_conn(conn, e);
+}
+
+long long FocusLogDao::insert_in_conn(MYSQL* conn, const Entry& e) {
+    if (!conn) return -1;
     if (e.session_id <= 0) return -1;
     if (e.focus_score < 0 || e.focus_score > 100) return -1;
     if (e.ts.empty()) return -1;
 
     std::string ts_mysql = iso8601_to_mysql(e.ts);
-
-    PooledConnection conn(pool_);
-    if (!conn.get()) return -1;
 
     MYSQL_STMT* stmt = mysql_stmt_init(conn);
     if (!stmt) return -1;
@@ -602,13 +714,17 @@ long long FocusLogDao::insert(const Entry& e) {
 // ============================================================================
 
 long long PostureLogDao::insert(const Entry& e) {
+    PooledConnection conn(pool_);
+    if (!conn.get()) return -1;
+    return insert_in_conn(conn, e);
+}
+
+long long PostureLogDao::insert_in_conn(MYSQL* conn, const Entry& e) {
+    if (!conn) return -1;
     if (e.session_id <= 0) return -1;
     if (e.ts.empty()) return -1;
 
     std::string ts_mysql = iso8601_to_mysql(e.ts);
-
-    PooledConnection conn(pool_);
-    if (!conn.get()) return -1;
 
     MYSQL_STMT* stmt = mysql_stmt_init(conn);
     if (!stmt) return -1;
@@ -669,15 +785,19 @@ long long PostureLogDao::insert(const Entry& e) {
 // ============================================================================
 
 long long PostureEventDao::insert(const Entry& e) {
+    PooledConnection conn(pool_);
+    if (!conn.get()) return -1;
+    return insert_in_conn(conn, e);
+}
+
+long long PostureEventDao::insert_in_conn(MYSQL* conn, const Entry& e) {
+    if (!conn) return -1;
     if (e.event_id.empty() || e.event_id.size() > 128) return -1;
     if (e.session_id <= 0) return -1;
     if (e.event_type.empty()) return -1;
     if (e.ts.empty()) return -1;
 
     std::string ts_mysql = iso8601_to_mysql(e.ts);
-
-    PooledConnection conn(pool_);
-    if (!conn.get()) return -1;
 
     MYSQL_STMT* stmt = mysql_stmt_init(conn);
     if (!stmt) return -1;

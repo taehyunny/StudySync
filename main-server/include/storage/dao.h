@@ -139,6 +139,19 @@ public:
     };
     AggregateResult aggregate(long long session_id);
 
+    /// 사용자의 미종료 세션 (end_time IS NULL) 을 강제 마감.
+    /// 새 /session/start 호출 시 호출 — 끊긴 이전 세션을 정리.
+    /// end_time 은 인자로 전달되는 ISO8601 또는 MySQL DATETIME 사용.
+    /// focus_min/avg_focus 는 각 세션 별로 aggregate() 결과로 계산.
+    /// @return 마감된 세션 개수
+    int force_close_user_open_sessions(long long user_id, const std::string& end_time);
+
+    /// 모든 사용자에 대해 stale 세션(시작 후 N시간 경과 + end_time NULL) 강제 마감.
+    /// SessionCleanupWorker 가 주기적으로 호출.
+    /// @param stale_hours 시작 후 이 시간 경과한 세션을 stale 로 판단 (기본 6h)
+    /// @return 마감된 세션 개수
+    int force_close_stale_sessions(int stale_hours);
+
 private:
     ConnectionPool& pool_;
 };
@@ -161,6 +174,10 @@ public:
 
     /// 단건 INSERT. 성공 시 row id, 실패 시 -1.
     long long insert(const Entry& e);
+
+    /// 외부 커넥션으로 INSERT (트랜잭션 묶기용). 풀에서 새로 acquire 안 함.
+    /// 호출자가 mysql_autocommit / commit / rollback 책임.
+    long long insert_in_conn(MYSQL* conn, const Entry& e);
 
 private:
     ConnectionPool& pool_;
@@ -186,6 +203,7 @@ public:
     };
 
     long long insert(const Entry& e);
+    long long insert_in_conn(MYSQL* conn, const Entry& e);
 
 private:
     ConnectionPool& pool_;
@@ -221,6 +239,7 @@ public:
     /// 멱등 INSERT. 같은 event_id 가 있으면 기존 row id 반환 (DB 변경 없음).
     /// 신규 INSERT 면 신규 id, 실패 시 -1.
     long long insert(const Entry& e);
+    long long insert_in_conn(MYSQL* conn, const Entry& e);
 
 private:
     ConnectionPool& pool_;

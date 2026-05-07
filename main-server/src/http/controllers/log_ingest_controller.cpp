@@ -144,13 +144,13 @@ void LogIngestController::register_routes() {
             return ok;
         };
 
-        int analysis_count = 0, event_count = 0, skipped = 0;
+        // 1) NDJSON 파싱 + ownership 검증 → Batch 구성. INSERT 는 아직 X.
+        LogService::Batch batch;
+        int analysis_lines = 0, event_lines = 0, skipped = 0;
 
-        // NDJSON 라인 분리 — \n 단위. Content-Type 무관.
         std::istringstream stream(req.body);
         std::string line;
         while (std::getline(stream, line)) {
-            // 빈 줄 / CR 처리
             if (!line.empty() && line.back() == '\r') line.pop_back();
             if (line.empty()) continue;
 
@@ -164,37 +164,49 @@ void LogIngestController::register_routes() {
 
             std::string kind = obj.value("kind", std::string{});
             long long session_id = obj.value("session_id", 0LL);
-            if (!owned(session_id)) {
-                ++skipped;
-                continue;
-            }
+            if (!owned(session_id)) { ++skipped; continue; }
 
             if (kind == "analysis") {
                 FocusLogDao::Entry f{};
                 PostureLogDao::Entry p{};
-                if (!parse_analysis_line(obj, session_id, f, p)) {
-                    ++skipped; continue;
-                }
-                long long fid = service_.insert_focus(f);
-                long long pid = service_.insert_posture(p);
-                if (fid > 0 || pid > 0) ++analysis_count;
-                else                    ++skipped;
+                if (!parse_analysis_line(obj, session_id, f, p)) { ++skipped; continue; }
+                batch.focuses.push_back(std::move(f));
+                batch.postures.push_back(std::move(p));
+                ++analysis_lines;
             } else if (kind == "event") {
                 PostureEventDao::Entry e{};
                 if (!parse_event_line(obj, session_id, e)) { ++skipped; continue; }
-                if (service_.insert_event(e) > 0) ++event_count;
-                else                              ++skipped;
+                batch.events.push_back(std::move(e));
+                ++event_lines;
             } else {
                 ++skipped;
             }
         }
 
-        log_main("/log/ingest user=%lld analysis=%d event=%d skipped=%d",
-                 auth.user_id, analysis_count, event_count, skipped);
+        // 2) 트랜잭션 INSERT. 부분 실패 시 ROLLBACK.
+        auto br = service_.ingest_transactional(batch);
+
+        if (!br.committed) {
+            log_err_clt("/log/ingest 트랜잭션 실패 | %s (lines: A=%d E=%d skipped=%d)",
+                        br.error_message.c_str(), analysis_lines, event_lines, skipped);
+            send_json(res, 500, {
+                {"code", 500},
+                {"message", br.error_message.empty() ? "transaction_failed" : br.error_message},
+                {"detail",  br.error_message.empty() ? "transaction_failed" : br.error_message},
+                {"accepted", {{"analysis", 0}, {"event", 0}}},
+                {"skipped", skipped + analysis_lines + event_lines}
+            });
+            return;
+        }
+
+        log_main("/log/ingest user=%lld analysis=%d event=%d skipped=%d (txn OK)",
+                 auth.user_id, analysis_lines, event_lines, skipped);
         send_json(res, 200, {
             {"code", 200},
             {"message", "ok"},
-            {"accepted", {{"analysis", analysis_count}, {"event", event_count}}},
+            // analysis 라인 1개 = focus 1 + posture 1 INSERT 라 두 개 다 카운트.
+            // 클라 호환을 위해 analysis 카운트는 line 수 (br.focus_inserted 와 동일).
+            {"accepted", {{"analysis", br.focus_inserted}, {"event", br.event_inserted}}},
             {"skipped", skipped}
         });
     });
