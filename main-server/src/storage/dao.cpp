@@ -80,10 +80,12 @@ static void bind_string(MYSQL_BIND& b, const std::string& s,
 
 long long UserDao::insert(const std::string& email,
                           const std::string& password,
-                          const std::string& name) {
+                          const std::string& name,
+                          const std::string& role) {
     if (email.empty() || email.size() > 255) return -1;
     if (password.empty() || password.size() > 128) return -1;
     if (name.empty() || name.size() > 100) return -1;
+    if (role.empty() || role.size() > 20) return -1;
 
     PooledConnection conn(pool_);
     if (!conn.get()) return -1;
@@ -98,8 +100,8 @@ long long UserDao::insert(const std::string& email,
     if (!stmt) return -1;
 
     const char* sql =
-        "INSERT INTO users (email, password_hash, name, created_at) "
-        "VALUES (?, ?, ?, NOW())";
+        "INSERT INTO users (email, password_hash, name, role, created_at) "
+        "VALUES (?, ?, ?, ?, NOW())";
 
     if (mysql_stmt_prepare(stmt, sql, std::strlen(sql)) != 0) {
         log_err_db("UserDao insert prepare 실패 | %s", mysql_stmt_error(stmt));
@@ -107,23 +109,28 @@ long long UserDao::insert(const std::string& email,
         return -1;
     }
 
-    MYSQL_BIND bind[3];
+    MYSQL_BIND bind[4];
     std::memset(bind, 0, sizeof(bind));
-    unsigned long l_email = 0, l_hash = 0, l_name = 0;
-    my_bool n_email = 0, n_hash = 0, n_name = 0;
+    unsigned long l_email = 0, l_hash = 0, l_name = 0, l_role = 0;
+    my_bool n_email = 0, n_hash = 0, n_name = 0, n_role = 0;
     bind_string(bind[0], email,  l_email, n_email);
     bind_string(bind[1], hashed, l_hash,  n_hash);
     bind_string(bind[2], name,   l_name,  n_name);
+    bind_string(bind[3], role,   l_role,  n_role);
 
     if (mysql_stmt_bind_param(stmt, bind) != 0 || mysql_stmt_execute(stmt) != 0) {
-        log_err_db("UserDao insert execute 실패 | %s", mysql_stmt_error(stmt));
+        // ER_DUP_ENTRY (1062) → email UNIQUE 충돌
+        unsigned int errno_ = mysql_stmt_errno(stmt);
+        log_err_db("UserDao insert execute 실패 | errno=%u %s",
+                   errno_, mysql_stmt_error(stmt));
         mysql_stmt_close(stmt);
         return -1;
     }
 
     long long id = static_cast<long long>(mysql_stmt_insert_id(stmt));
     mysql_stmt_close(stmt);
-    log_db("INSERT users | id=%lld email=%s name=%s", id, email.c_str(), name.c_str());
+    log_db("INSERT users | id=%lld email=%s name=%s role=%s",
+           id, email.c_str(), name.c_str(), role.c_str());
     return id;
 }
 
@@ -137,7 +144,7 @@ UserDao::UserInfo UserDao::find_by_email(const std::string& email) {
     MYSQL_STMT* stmt = mysql_stmt_init(conn);
     if (!stmt) return info;
 
-    const char* sql = "SELECT id, email, name, password_hash FROM users WHERE email=? LIMIT 1";
+    const char* sql = "SELECT id, email, name, role, password_hash FROM users WHERE email=? LIMIT 1";
     if (mysql_stmt_prepare(stmt, sql, std::strlen(sql)) != 0) {
         log_err_db("UserDao find prepare 실패 | %s", mysql_stmt_error(stmt));
         mysql_stmt_close(stmt);
@@ -154,18 +161,20 @@ UserDao::UserInfo UserDao::find_by_email(const std::string& email) {
         return info;
     }
 
-    MYSQL_BIND br[4]; std::memset(br, 0, sizeof(br));
+    MYSQL_BIND br[5]; std::memset(br, 0, sizeof(br));
     long long r_id = 0;
-    char r_email[256]{}, r_name[128]{}, r_hash[256]{};
-    unsigned long l_e = 0, l_n = 0, l_h = 0;
+    char r_email[256]{}, r_name[128]{}, r_role[32]{}, r_hash[256]{};
+    unsigned long l_e = 0, l_n = 0, l_r = 0, l_h = 0;
 
     bind_longlong(br[0], &r_id);
     br[1].buffer_type = MYSQL_TYPE_STRING; br[1].buffer = r_email;
     br[1].buffer_length = sizeof(r_email); br[1].length = &l_e;
     br[2].buffer_type = MYSQL_TYPE_STRING; br[2].buffer = r_name;
     br[2].buffer_length = sizeof(r_name);  br[2].length = &l_n;
-    br[3].buffer_type = MYSQL_TYPE_STRING; br[3].buffer = r_hash;
-    br[3].buffer_length = sizeof(r_hash);  br[3].length = &l_h;
+    br[3].buffer_type = MYSQL_TYPE_STRING; br[3].buffer = r_role;
+    br[3].buffer_length = sizeof(r_role);  br[3].length = &l_r;
+    br[4].buffer_type = MYSQL_TYPE_STRING; br[4].buffer = r_hash;
+    br[4].buffer_length = sizeof(r_hash);  br[4].length = &l_h;
 
     if (mysql_stmt_bind_result(stmt, br) != 0) {
         mysql_stmt_close(stmt);
@@ -176,6 +185,7 @@ UserDao::UserInfo UserDao::find_by_email(const std::string& email) {
         info.id    = r_id;
         info.email.assign(r_email, l_e);
         info.name.assign(r_name, l_n);
+        info.role.assign(r_role, l_r);
         info.password_hash.assign(r_hash, l_h);
         info.found = true;
     }
@@ -471,6 +481,55 @@ SessionDao::SessionInfo SessionDao::find_by_id(long long session_id) {
     }
     mysql_stmt_close(stmt);
     return info;
+}
+
+SessionDao::AggregateResult SessionDao::aggregate(long long session_id) {
+    AggregateResult r;
+    if (session_id <= 0) return r;
+
+    PooledConnection conn(pool_);
+    if (!conn.get()) return r;
+
+    MYSQL_STMT* stmt = mysql_stmt_init(conn);
+    if (!stmt) return r;
+
+    // TODO(spec): focus_min 정의 미정. 잠정: state='집중' 행 수 × 0.2초 / 60.
+    // AVG(focus_score) 는 0~100 → /100 으로 0~1 변환은 호출자가 처리.
+    const char* sql =
+        "SELECT "
+        "  COUNT(*) AS sample_count,"
+        "  AVG(focus_score) AS avg_score,"
+        "  SUM(CASE WHEN state = '집중' THEN 1 ELSE 0 END) AS focused_rows "
+        "FROM focus_logs WHERE session_id=?";
+    if (mysql_stmt_prepare(stmt, sql, std::strlen(sql)) != 0) {
+        log_err_db("SessionDao aggregate prepare 실패 | %s", mysql_stmt_error(stmt));
+        mysql_stmt_close(stmt);
+        return r;
+    }
+
+    MYSQL_BIND bp[1]; std::memset(bp, 0, sizeof(bp));
+    bind_longlong(bp[0], &session_id);
+    if (mysql_stmt_bind_param(stmt, bp) != 0 || mysql_stmt_execute(stmt) != 0) {
+        mysql_stmt_close(stmt);
+        return r;
+    }
+
+    MYSQL_BIND br[3]; std::memset(br, 0, sizeof(br));
+    long long sample_cnt = 0, focused = 0;
+    double avg_raw = 0.0;
+    my_bool null_avg = 0;
+    bind_longlong(br[0], &sample_cnt);
+    bind_double  (br[1], &avg_raw); br[1].is_null = &null_avg;
+    bind_longlong(br[2], &focused);
+
+    mysql_stmt_bind_result(stmt, br);
+    if (mysql_stmt_fetch(stmt) == 0) {
+        r.sample_count = sample_cnt;
+        r.avg_focus    = null_avg ? 0.0 : (avg_raw / 100.0);   // 0~1 비율
+        r.focus_min    = static_cast<double>(focused) * 0.2 / 60.0;
+    }
+    mysql_stmt_close(stmt);
+    return r;
 }
 
 // ============================================================================
@@ -916,6 +975,241 @@ std::vector<ModelDao::ModelInfo> ModelDao::list_all() {
         result.push_back(m);
     }
     mysql_free_result(res);
+    return result;
+}
+
+// ============================================================================
+// StatsDao — 통계 집계
+// ============================================================================
+// TODO(spec) 가 다수 — 클라 코드와 의미 합의 후 SQL 정확히 다듬을 것.
+// 현재는 잠정 정의로 동작하는 SQL.
+
+StatsDao::TodayStats StatsDao::get_today(long long user_id, int daily_goal_min) {
+    TodayStats r;
+    if (user_id <= 0) return r;
+
+    PooledConnection conn(pool_);
+    if (!conn.get()) return r;
+
+    // 오늘(로컬타임 기준) 사용자의 모든 세션의 focus_logs 집계 + posture warning 집계.
+    // TODO(spec): warning_count 정의 = posture_logs(posture_ok=0) 카운트로 잠정.
+    const char* sql =
+        "SELECT "
+        "  COALESCE(SUM(CASE WHEN fl.state='집중' THEN 1 ELSE 0 END),0) AS focused_rows,"
+        "  COALESCE(AVG(fl.focus_score),0)                              AS avg_score,"
+        "  ("
+        "    SELECT COUNT(*) FROM posture_logs pl "
+        "    JOIN sessions s2 ON s2.id = pl.session_id "
+        "    WHERE s2.user_id=? AND s2.date=CURDATE() AND pl.posture_ok=0"
+        "  ) AS warning_count "
+        "FROM focus_logs fl "
+        "JOIN sessions s ON s.id = fl.session_id "
+        "WHERE s.user_id=? AND s.date=CURDATE()";
+
+    MYSQL_STMT* stmt = mysql_stmt_init(conn);
+    if (!stmt) return r;
+    if (mysql_stmt_prepare(stmt, sql, std::strlen(sql)) != 0) {
+        log_err_db("StatsDao today prepare 실패 | %s", mysql_stmt_error(stmt));
+        mysql_stmt_close(stmt);
+        return r;
+    }
+
+    MYSQL_BIND bp[2]; std::memset(bp, 0, sizeof(bp));
+    long long uid1 = user_id, uid2 = user_id;
+    bind_longlong(bp[0], &uid1);
+    bind_longlong(bp[1], &uid2);
+    if (mysql_stmt_bind_param(stmt, bp) != 0 || mysql_stmt_execute(stmt) != 0) {
+        mysql_stmt_close(stmt);
+        return r;
+    }
+
+    MYSQL_BIND br[3]; std::memset(br, 0, sizeof(br));
+    long long focused = 0, warn = 0;
+    double avg_raw = 0.0;
+    bind_longlong(br[0], &focused);
+    bind_double  (br[1], &avg_raw);
+    bind_longlong(br[2], &warn);
+
+    mysql_stmt_bind_result(stmt, br);
+    if (mysql_stmt_fetch(stmt) == 0) {
+        r.focus_min     = static_cast<double>(focused) * 0.2 / 60.0;
+        r.avg_focus     = avg_raw / 100.0;
+        r.warning_count = warn;
+        r.goal_progress = (daily_goal_min > 0)
+            ? r.focus_min / static_cast<double>(daily_goal_min)
+            : 0.0;
+    }
+    mysql_stmt_close(stmt);
+    return r;
+}
+
+std::vector<StatsDao::HourBucket>
+StatsDao::get_hourly(long long user_id, const std::string& date) {
+    std::vector<HourBucket> result;
+    if (user_id <= 0 || date.size() != 10) return result;
+
+    PooledConnection conn(pool_);
+    if (!conn.get()) return result;
+
+    // hour 별 AVG(focus_score)/100 → 0~1
+    const char* sql =
+        "SELECT HOUR(fl.ts) AS h, AVG(fl.focus_score)/100.0 AS avg_focus "
+        "FROM focus_logs fl JOIN sessions s ON s.id=fl.session_id "
+        "WHERE s.user_id=? AND s.date=? "
+        "GROUP BY HOUR(fl.ts) ORDER BY h";
+
+    MYSQL_STMT* stmt = mysql_stmt_init(conn);
+    if (!stmt) return result;
+    if (mysql_stmt_prepare(stmt, sql, std::strlen(sql)) != 0) {
+        log_err_db("StatsDao hourly prepare 실패 | %s", mysql_stmt_error(stmt));
+        mysql_stmt_close(stmt);
+        return result;
+    }
+
+    MYSQL_BIND bp[2]; std::memset(bp, 0, sizeof(bp));
+    unsigned long l_date = 0; my_bool n_date = 0;
+    bind_longlong(bp[0], &user_id);
+    bind_string(bp[1], date, l_date, n_date);
+    if (mysql_stmt_bind_param(stmt, bp) != 0 || mysql_stmt_execute(stmt) != 0) {
+        mysql_stmt_close(stmt);
+        return result;
+    }
+
+    MYSQL_BIND br[2]; std::memset(br, 0, sizeof(br));
+    int h = 0;
+    double avg_focus = 0.0;
+    bind_long  (br[0], &h);
+    bind_double(br[1], &avg_focus);
+    mysql_stmt_bind_result(stmt, br);
+    while (mysql_stmt_fetch(stmt) == 0) {
+        result.push_back({h, avg_focus});
+    }
+    mysql_stmt_close(stmt);
+    return result;
+}
+
+StatsDao::PatternStats StatsDao::get_pattern(long long user_id) {
+    PatternStats r;
+    if (user_id <= 0) return r;
+
+    PooledConnection conn(pool_);
+    if (!conn.get()) return r;
+
+    // TODO(spec): avg_focus_duration / best_hour / weekly_avg 의미 미정.
+    //   잠정:
+    //     avg_focus_duration = 세션당 focus_min 평균 (분).
+    //     best_hour          = 오늘 hour 별 AVG(focus_score) 최대값의 hour.
+    //     weekly_avg         = 최근 7일 AVG(focus_score) / 100.
+    {
+        const char* sql =
+            "SELECT AVG(focus_min) FROM sessions "
+            "WHERE user_id=? AND end_time IS NOT NULL "
+            "  AND start_time >= NOW() - INTERVAL 7 DAY";
+        MYSQL_STMT* stmt = mysql_stmt_init(conn);
+        if (stmt && mysql_stmt_prepare(stmt, sql, std::strlen(sql)) == 0) {
+            MYSQL_BIND bp[1]; std::memset(bp, 0, sizeof(bp));
+            bind_longlong(bp[0], &user_id);
+            if (mysql_stmt_bind_param(stmt, bp) == 0 && mysql_stmt_execute(stmt) == 0) {
+                MYSQL_BIND br[1]; std::memset(br, 0, sizeof(br));
+                double avg = 0.0; my_bool n = 0;
+                bind_double(br[0], &avg); br[0].is_null = &n;
+                mysql_stmt_bind_result(stmt, br);
+                if (mysql_stmt_fetch(stmt) == 0 && !n) r.avg_focus_duration = avg;
+            }
+        }
+        if (stmt) mysql_stmt_close(stmt);
+    }
+
+    {
+        const char* sql =
+            "SELECT HOUR(fl.ts) h FROM focus_logs fl "
+            "JOIN sessions s ON s.id=fl.session_id "
+            "WHERE s.user_id=? AND s.date=CURDATE() "
+            "GROUP BY HOUR(fl.ts) ORDER BY AVG(fl.focus_score) DESC LIMIT 1";
+        MYSQL_STMT* stmt = mysql_stmt_init(conn);
+        if (stmt && mysql_stmt_prepare(stmt, sql, std::strlen(sql)) == 0) {
+            MYSQL_BIND bp[1]; std::memset(bp, 0, sizeof(bp));
+            bind_longlong(bp[0], &user_id);
+            if (mysql_stmt_bind_param(stmt, bp) == 0 && mysql_stmt_execute(stmt) == 0) {
+                MYSQL_BIND br[1]; std::memset(br, 0, sizeof(br));
+                int h = -1; bind_long(br[0], &h);
+                mysql_stmt_bind_result(stmt, br);
+                if (mysql_stmt_fetch(stmt) == 0) r.best_hour = h;
+            }
+        }
+        if (stmt) mysql_stmt_close(stmt);
+    }
+
+    {
+        const char* sql =
+            "SELECT AVG(fl.focus_score)/100.0 FROM focus_logs fl "
+            "JOIN sessions s ON s.id=fl.session_id "
+            "WHERE s.user_id=? AND s.date >= CURDATE() - INTERVAL 7 DAY";
+        MYSQL_STMT* stmt = mysql_stmt_init(conn);
+        if (stmt && mysql_stmt_prepare(stmt, sql, std::strlen(sql)) == 0) {
+            MYSQL_BIND bp[1]; std::memset(bp, 0, sizeof(bp));
+            bind_longlong(bp[0], &user_id);
+            if (mysql_stmt_bind_param(stmt, bp) == 0 && mysql_stmt_execute(stmt) == 0) {
+                MYSQL_BIND br[1]; std::memset(br, 0, sizeof(br));
+                double v = 0.0; my_bool n = 0;
+                bind_double(br[0], &v); br[0].is_null = &n;
+                mysql_stmt_bind_result(stmt, br);
+                if (mysql_stmt_fetch(stmt) == 0 && !n) r.weekly_avg = v;
+            }
+        }
+        if (stmt) mysql_stmt_close(stmt);
+    }
+    return r;
+}
+
+std::vector<StatsDao::DayBucket> StatsDao::get_weekly(long long user_id) {
+    std::vector<DayBucket> result;
+    if (user_id <= 0) return result;
+
+    PooledConnection conn(pool_);
+    if (!conn.get()) return result;
+
+    // 최근 7일 일별 합계.
+    // focus_min 은 sessions.focus_min (이미 종료된 세션 합) 사용.
+    // avg_focus 는 일별 focus_logs AVG/100.
+    const char* sql =
+        "SELECT DATE_FORMAT(s.date, '%Y-%m-%d') AS d, "
+        "       COALESCE(SUM(s.focus_min),0)         AS focus_min, "
+        "       COALESCE(("
+        "         SELECT AVG(fl.focus_score)/100.0 FROM focus_logs fl "
+        "         JOIN sessions s2 ON s2.id=fl.session_id "
+        "         WHERE s2.user_id=s.user_id AND s2.date=s.date), 0) AS avg_focus "
+        "FROM sessions s "
+        "WHERE s.user_id=? AND s.date >= CURDATE() - INTERVAL 7 DAY "
+        "GROUP BY s.date ORDER BY s.date";
+
+    MYSQL_STMT* stmt = mysql_stmt_init(conn);
+    if (!stmt) return result;
+    if (mysql_stmt_prepare(stmt, sql, std::strlen(sql)) != 0) {
+        log_err_db("StatsDao weekly prepare 실패 | %s", mysql_stmt_error(stmt));
+        mysql_stmt_close(stmt);
+        return result;
+    }
+    MYSQL_BIND bp[1]; std::memset(bp, 0, sizeof(bp));
+    bind_longlong(bp[0], &user_id);
+    if (mysql_stmt_bind_param(stmt, bp) != 0 || mysql_stmt_execute(stmt) != 0) {
+        mysql_stmt_close(stmt);
+        return result;
+    }
+
+    MYSQL_BIND br[3]; std::memset(br, 0, sizeof(br));
+    char r_date[16]{}; unsigned long l_date = 0;
+    double focus_min = 0.0, avg_focus = 0.0;
+    br[0].buffer_type = MYSQL_TYPE_STRING; br[0].buffer = r_date;
+    br[0].buffer_length = sizeof(r_date);  br[0].length = &l_date;
+    bind_double(br[1], &focus_min);
+    bind_double(br[2], &avg_focus);
+
+    mysql_stmt_bind_result(stmt, br);
+    while (mysql_stmt_fetch(stmt) == 0) {
+        result.push_back({std::string(r_date, l_date), focus_min, avg_focus});
+    }
+    mysql_stmt_close(stmt);
     return result;
 }
 

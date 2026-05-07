@@ -1,0 +1,33 @@
+{
+  "network": {
+    "main_server_ai_port": 9000,
+    "http_host": "0.0.0.0",
+    "http_port": 8080,
+    "training_server_host": "10.10.10.120",
+    "training_server_port": 9100,
+    "allowed_ip_prefixes": ["127.", "10.", "192.168.", "172."]
+  },
+
+  "database": {
+    "host":      "10.10.10.100",
+    "user":      "admin",
+    "password":  "1234",
+    "schema":    "StudySync",
+    "pool_size": 4
+  },
+
+  "auth": {
+    "jwt_secret":      "studysync-dev-secret-please-change",
+    "jwt_expires_sec": 86400
+  },
+
+  "limits": {
+    "event_queue_max": 10000,
+    "model_max_bytes": 524288000
+  },
+
+  "health_targets": [
+    { "name": "ai_inference",  "ip": "127.0.0.1",      "port": 8001 },
+    { "name": "ai_training",   "ip": "10.10.10.120",   "port": 9100 }
+  ]
+}
