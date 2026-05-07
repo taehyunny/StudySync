@@ -34,9 +34,10 @@ END_MESSAGE_MAP()
 
 // ── 생성 ─────────────────────────────────────────────────────────
 
-ReviewDlg::ReviewDlg(ReviewEventStore& store, CWnd* parent)
+ReviewDlg::ReviewDlg(ReviewEventStore& store, long long session_id, CWnd* parent)
     : CDialog(IDD_REVIEW, parent)
     , store_(store)
+    , session_id_(session_id)
 {
 }
 
@@ -196,7 +197,7 @@ void ReviewDlg::OnBnClickedWrong()
 {
     if (sel_index_ < 0) return;
 
-    // 동의 여부 확인 (ConsentStore — %APPDATA%\StudySync\consent.dat)
+    // ── 동의 여부 확인 (최초 1회, ConsentStore — %APPDATA%\StudySync\consent.dat)
     if (!ConsentStore::is_consented()) {
         const int answer = AfxMessageBox(
             _T("이 영상이 모델 개선 목적으로 개발팀에 전송됩니다.\n동의하시겠습니까?"),
@@ -207,10 +208,24 @@ void ReviewDlg::OnBnClickedWrong()
 
     apply_feedback(sel_index_, ReviewEvent::Feedback::Wrong);
 
-    // TODO (Stage 3): FeedbackApi::upload(events_[sel_index_]) 호출
-    //   - POST /feedback  multipart/form-data
-    //   - clip: 3초 MP4 (현재는 JPEG sequence 디렉터리)
-    //   - clip_access: "local_only" → "uploaded_url"
+    // ── POST /feedback — multipart/form-data ──────────────────────
+    const ReviewEvent& ev = events_[sel_index_];
+
+    FeedbackRequest req;
+    req.event_id      = ev.event_id;
+    req.session_id    = session_id_;
+    req.model_pred    = ev.clip_dir;   // clip_dir은 이벤트 유형 식별자로도 활용
+    req.user_feedback = "wrong";
+    req.consent_ver   = ConsentStore::kCurrentVersion;
+    req.clip_path     = ev.clip_dir;   // 클립 경로 (MP4 미확정 → 디렉터리 or 빈 값)
+
+    // 백그라운드 스레드 없이 동기 전송 (이벤트 발생 빈도가 낮아 UI 블록 무시 가능)
+    const FeedbackResponse resp = FeedbackApi::send(req);
+
+    if (!resp.saved) {
+        // 업로드 실패 → 사용자에게 재시도 안내 없이 로컬에 피드백 상태만 유지
+        OutputDebugStringA("[ReviewDlg] FeedbackApi::send 실패\n");
+    }
 }
 
 // ── 리스트 선택 이벤트 ───────────────────────────────────────────
