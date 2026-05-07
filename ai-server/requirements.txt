@@ -1,7 +1,22 @@
-fastapi==0.111.0
-uvicorn==0.29.0
-opencv-python==4.9.0.80
-mediapipe==0.10.14
-numpy==1.26.4
-requests==2.31.0
-pydantic==2.7.1
+# StudySync AI 서버 의존성
+# Python 3.12 권장
+# 설치: pip install -r requirements.txt
+ 
+# ── 핵심 AI / Vision
+mediapipe==0.10.14          # 얼굴 랜드마크 추출 (Face Mesh, Pose)
+opencv-python==4.10.0.84    # 웹캠 프레임 처리, 이미지 저장
+numpy==1.26.4               # 수치 연산
+protobuf==4.25.3            # mediapipe 호환 버전
+ 
+# ── FastAPI 서버
+fastapi==0.111.0            # API 프레임워크
+uvicorn==0.29.0             # ASGI 서버
+pydantic==2.7.1             # 요청/응답 스키마
+ 
+# ── HTTP 통신 (테스트 클라이언트용)
+requests==2.31.0            # AI 서버 테스트용
+ 
+# ── Phase 2 모델 학습 (집중도 분류기)
+torch==2.3.0                # PyTorch MLP 학습
+scikit-learn==1.4.2         # 데이터 분할, 평가 지표
+pandas==2.2.2               # CSV 데이터 로드
