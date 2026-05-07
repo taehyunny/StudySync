@@ -76,8 +76,7 @@
     <ClInclude Include="include\network\EventUploadThread.h" />
     <ClInclude Include="include\network\ClientTransportConfig.h" />
     <ClInclude Include="include\network\ClientTransportFactory.h" />
-    <ClInclude Include="include\network\AiAnalyzeApi.h" />
-    <ClInclude Include="include\network\AiAnalyzeThread.h" />
+    <ClInclude Include="include\network\AiTcpClient.h" />
     <ClInclude Include="include\network\HeartbeatClient.h" />
     <ClInclude Include="include\network\HttpJsonlLogSink.h" />
     <ClInclude Include="include\network\AuthApi.h" />
@@ -121,8 +120,7 @@
     <ClCompile Include="src\core\WorkerThreadPool.cpp" />
     <ClCompile Include="src\event\EventShadowBuffer.cpp" />
     <ClCompile Include="src\event\PostureEventDetector.cpp" />
-    <ClCompile Include="src\network\AiAnalyzeApi.cpp" />
-    <ClCompile Include="src\network\AiAnalyzeThread.cpp" />
+    <ClCompile Include="src\network\AiTcpClient.cpp" />
     <ClCompile Include="src\network\ConnectionState.cpp" />
     <ClCompile Include="src\network\ZmqRecvThread.cpp" />
     <ClCompile Include="src\network\ZmqSendThread.cpp" />
