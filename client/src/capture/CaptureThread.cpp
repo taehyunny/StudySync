@@ -24,13 +24,13 @@ CaptureThread::~CaptureThread()
     stop();
 }
 
-void CaptureThread::start(int camera_index)
+void CaptureThread::start(int camera_index, int fps)
 {
     if (running_.exchange(true)) {
         return;
     }
 
-    worker_ = std::thread(&CaptureThread::run, this, camera_index);
+    worker_ = std::thread(&CaptureThread::run, this, camera_index, fps);
 }
 
 void CaptureThread::stop()
@@ -41,13 +41,15 @@ void CaptureThread::stop()
     }
 }
 
-void CaptureThread::run(int camera_index)
+void CaptureThread::run(int camera_index, int fps)
 {
     cv::VideoCapture capture(camera_index);
     if (!capture.isOpened()) {
         running_ = false;
         return;
     }
+
+    const auto frame_interval = std::chrono::milliseconds(fps > 0 ? 1000 / fps : 33);
 
     while (running_) {
         Frame frame;
@@ -61,6 +63,6 @@ void CaptureThread::run(int camera_index)
         send_buffer_.push(frame);
         shadow_buffer_.push(frame);
 
-        std::this_thread::sleep_for(std::chrono::milliseconds(33));
+        std::this_thread::sleep_for(frame_interval);
     }
 }

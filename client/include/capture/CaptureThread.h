@@ -15,11 +15,11 @@ public:
     CaptureThread(RenderFrameBuffer& render_buffer, SendFrameBuffer& send_buffer, EventShadowBuffer& shadow_buffer);
     ~CaptureThread();
 
-    void start(int camera_index = 0);
+    void start(int camera_index = 0, int fps = 30);
     void stop();
 
 private:
-    void run(int camera_index);
+    void run(int camera_index, int fps);
 
     RenderFrameBuffer& render_buffer_;
     SendFrameBuffer& send_buffer_;

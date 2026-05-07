@@ -1,5 +1,8 @@
 #pragma once
 
+#include "model/AnalysisResultBuffer.h"
+#include "render/OverlayPainter.h"
+
 #include <d2d1.h>
 #include <d2d1helper.h>
 #include <mutex>
@@ -10,7 +13,7 @@ class D2DRenderer {
 public:
     ~D2DRenderer() = default;
 
-    bool init(HWND hwnd);
+    bool init(HWND hwnd, AnalysisResultBuffer& result_buffer);
     void upload_and_render(const cv::Mat& bgr);
     void notify_resize(UINT w, UINT h);
 
@@ -31,4 +34,7 @@ private:
     UINT       pending_w_      = 0;
     UINT       pending_h_      = 0;
     bool       resize_pending_ = false;
+
+    AnalysisResultBuffer* result_buffer_ = nullptr;   // 공유 버퍼 (비소유)
+    OverlayPainter        overlay_;
 };

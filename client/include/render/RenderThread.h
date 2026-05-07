@@ -1,6 +1,7 @@
 #pragma once
 
 #include "capture/CaptureThread.h"
+#include "model/AnalysisResultBuffer.h"
 #include "render/D2DRenderer.h"
 
 #include <atomic>
@@ -11,12 +12,12 @@ public:
     explicit RenderThread(CaptureThread::RenderFrameBuffer& frame_buffer);
     ~RenderThread();
 
-    void start(HWND hwnd);
+    void start(HWND hwnd, AnalysisResultBuffer& result_buffer);
     void stop();
     void notify_resize(UINT w, UINT h);
 
 private:
-    void run(HWND hwnd);
+    void run(HWND hwnd, AnalysisResultBuffer* result_buffer);
 
     CaptureThread::RenderFrameBuffer& frame_buffer_;
     D2DRenderer                       renderer_;
