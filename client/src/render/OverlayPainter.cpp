@@ -2,6 +2,7 @@
 #include "render/OverlayPainter.h"
 
 #include <algorithm>
+#include <chrono>
 #include <cwchar>
 
 #pragma comment(lib, "dwrite.lib")
@@ -48,6 +49,8 @@ void OverlayPainter::release_resources()
     brush_orange_.Reset();
     brush_red_.Reset();
     brush_bar_bg_.Reset();
+    brush_toast_bg_.Reset();
+    brush_timer_bg_.Reset();
     fmt_label_.Reset();
     fmt_value_.Reset();
     fmt_score_.Reset();
@@ -106,6 +109,8 @@ bool OverlayPainter::ensure_resources(ID2D1RenderTarget* rt)
     if (FAILED(rt->CreateSolidColorBrush(D2D1::ColorF(0.95f, 0.45f, 0.12f), brush_orange_.GetAddressOf()))) return false;
     if (FAILED(rt->CreateSolidColorBrush(D2D1::ColorF(0.90f, 0.20f, 0.20f), brush_red_.GetAddressOf()))) return false;
     if (FAILED(rt->CreateSolidColorBrush(D2D1::ColorF(0.22f, 0.22f, 0.22f), brush_bar_bg_.GetAddressOf()))) return false;
+    if (FAILED(rt->CreateSolidColorBrush(D2D1::ColorF(0.70f, 0.12f, 0.12f, 0.88f), brush_toast_bg_.GetAddressOf()))) return false;
+    if (FAILED(rt->CreateSolidColorBrush(D2D1::ColorF(0.0f,  0.0f,  0.0f,  0.60f), brush_timer_bg_.GetAddressOf()))) return false;
 
     initialized_ = true;
     return true;
@@ -116,6 +121,25 @@ void OverlayPainter::draw(ID2D1RenderTarget* rt, const AnalysisResult& result)
     if (!rt) return;
     if (!ensure_resources(rt)) return;
 
+    // ── 좌상단: 세션 타이머 (항상 표시) ──────────────────────
+    constexpr float kLeft = 12.0f;
+    float next_y = 12.0f;
+
+    const std::uint64_t start_ms = session_start_ms_.load();
+    if (start_ms > 0) {
+        draw_timer(rt, kLeft, next_y);
+        next_y += 36.0f;
+    }
+
+    // ── 좌상단: 토스트 알림 (활성 시 표시) ────────────────────
+    if (toast_buffer_) {
+        std::string toast_text;
+        if (toast_buffer_->get_active(toast_text)) {
+            draw_toast(rt, kLeft, next_y, toast_text);
+        }
+    }
+
+    // ── 우상단: 분석 수치 패널 ─────────────────────────────────
     const D2D1_SIZE_F size = rt->GetSize();
     const float px = size.width - kPanelW - kPanelMargin;
     const float py = kPanelMargin;
@@ -253,4 +277,54 @@ ID2D1SolidColorBrush* OverlayPainter::focus_bar_brush(float score) const
     if (score >= 70.0f) return brush_green_.Get();
     if (score >= 40.0f) return brush_yellow_.Get();
     return brush_red_.Get();
+}
+
+void OverlayPainter::draw_timer(ID2D1RenderTarget* rt, float x, float y)
+{
+    using namespace std::chrono;
+    const long long now = duration_cast<milliseconds>(
+        steady_clock::now().time_since_epoch()).count();
+    const long long elapsed_s = (now - static_cast<long long>(session_start_ms_.load())) / 1000;
+    const long long h = elapsed_s / 3600;
+    const long long m = (elapsed_s % 3600) / 60;
+    const long long s = elapsed_s % 60;
+
+    wchar_t buf[32];
+    swprintf_s(buf, L"%02lld:%02lld:%02lld", h, m, s);
+
+    constexpr float kW = 90.0f;
+    constexpr float kH = 26.0f;
+    const D2D1_ROUNDED_RECT bg = D2D1::RoundedRect(
+        D2D1::RectF(x, y, x + kW, y + kH), 5.0f, 5.0f);
+    rt->FillRoundedRectangle(bg, brush_timer_bg_.Get());
+
+    draw_text(rt, buf, x + 8.0f, y + 5.0f, kW - 10.0f, kH, fmt_value_.Get(), brush_white_.Get());
+}
+
+void OverlayPainter::draw_toast(ID2D1RenderTarget* rt, float x, float y, const std::string& text)
+{
+    // ASCII 변환 (DirectWrite는 wstring)
+    const std::wstring wtext(text.begin(), text.end());
+
+    constexpr float kW = 240.0f;
+    constexpr float kH = 48.0f;
+
+    const D2D1_ROUNDED_RECT bg = D2D1::RoundedRect(
+        D2D1::RectF(x, y, x + kW, y + kH), 6.0f, 6.0f);
+    rt->FillRoundedRectangle(bg, brush_toast_bg_.Get());
+    rt->DrawRoundedRectangle(bg, brush_red_.Get(), 1.0f);
+
+    // 경고 아이콘 (느낌표)
+    draw_text(rt, L"!", x + 10.0f, y + 8.0f, 16.0f, 32.0f, fmt_score_.Get(), brush_white_.Get());
+
+    // 알림 텍스트 (title : message 구조, ':' 기준으로 두 줄로 분리)
+    const auto colon = text.find(": ");
+    if (colon != std::string::npos) {
+        const std::wstring title(text.begin(), text.begin() + colon);
+        const std::wstring msg(text.begin() + colon + 2, text.end());
+        draw_text(rt, title, x + 30.0f, y +  8.0f, kW - 40.0f, 18.0f, fmt_value_.Get(), brush_white_.Get());
+        draw_text(rt, msg,   x + 30.0f, y + 27.0f, kW - 40.0f, 16.0f, fmt_label_.Get(), brush_gray_.Get());
+    } else {
+        draw_text(rt, wtext, x + 30.0f, y + 14.0f, kW - 40.0f, 20.0f, fmt_value_.Get(), brush_white_.Get());
+    }
 }

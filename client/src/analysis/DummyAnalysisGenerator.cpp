@@ -146,6 +146,9 @@ void DummyAnalysisGenerator::run(int interval_ms)
         // 2) 자세 이벤트 감지기에 전달 (이벤트 발생 시 callback → EventQueue)
         detector_.feed(result, shadow_buffer_);
 
+        // 3) AlertManager 등 외부 콜백 (set_result_callback으로 등록)
+        if (result_callback_) result_callback_(result);
+
         std::this_thread::sleep_for(std::chrono::milliseconds(interval_ms));
     }
 }

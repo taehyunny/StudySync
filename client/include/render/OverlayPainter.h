@@ -1,7 +1,9 @@
 #pragma once
 
 #include "model/AnalysisResult.h"
+#include "model/ToastBuffer.h"
 
+#include <atomic>
 #include <d2d1.h>
 #include <dwrite.h>
 #include <string>
@@ -15,6 +17,12 @@ public:
 
     // Called when the render target is recreated so D2D target-bound resources are rebuilt.
     void invalidate();
+
+    // 세션 시작 시각 설정 (steady_clock 기준 ms). 0이면 타이머 미표시.
+    void set_session_start_ms(std::uint64_t ms) { session_start_ms_.store(ms); }
+
+    // 토스트 버퍼 연결 (렌더 스레드 시작 전 1회 호출).
+    void set_toast_buffer(ToastBuffer* tb) { toast_buffer_ = tb; }
 
     // Draws the latest AI analysis result over the camera frame.
     void draw(ID2D1RenderTarget* rt, const AnalysisResult& result);
@@ -47,6 +55,12 @@ private:
                   ID2D1SolidColorBrush* brush);
 
     ID2D1SolidColorBrush* focus_bar_brush(float score) const;
+    void draw_timer(ID2D1RenderTarget* rt, float x, float y);
+    void draw_toast(ID2D1RenderTarget* rt, float x, float y, const std::string& text);
+
+    // 세션 타이머 / 토스트
+    std::atomic<std::uint64_t> session_start_ms_{ 0 };
+    ToastBuffer*               toast_buffer_ = nullptr;
 
     Microsoft::WRL::ComPtr<IDWriteFactory> dwrite_;
     Microsoft::WRL::ComPtr<IDWriteTextFormat> fmt_label_;
@@ -61,6 +75,8 @@ private:
     Microsoft::WRL::ComPtr<ID2D1SolidColorBrush> brush_orange_;
     Microsoft::WRL::ComPtr<ID2D1SolidColorBrush> brush_red_;
     Microsoft::WRL::ComPtr<ID2D1SolidColorBrush> brush_bar_bg_;
+    Microsoft::WRL::ComPtr<ID2D1SolidColorBrush> brush_toast_bg_;   // 토스트 배경
+    Microsoft::WRL::ComPtr<ID2D1SolidColorBrush> brush_timer_bg_;   // 타이머 배경
 
     bool initialized_ = false;
 };

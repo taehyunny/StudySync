@@ -6,6 +6,7 @@
 #include "model/AnalysisResultBuffer.h"
 
 #include <atomic>
+#include <functional>
 #include <thread>
 
 // ============================================================================
@@ -33,6 +34,10 @@ public:
     void start(int interval_ms = 200);
     void stop();
 
+    // AnalysisResult 생성마다 호출할 콜백 (AlertManager 배선용, start() 전에 설정)
+    using ResultCallback = std::function<void(const AnalysisResult&)>;
+    void set_result_callback(ResultCallback cb) { result_callback_ = std::move(cb); }
+
 private:
     void run(int interval_ms);
 
@@ -40,6 +45,7 @@ private:
     EventShadowBuffer&    shadow_buffer_;
     EventQueue&           event_queue_;
     PostureEventDetector  detector_;
+    ResultCallback        result_callback_;
 
     std::atomic_bool running_{ false };
     std::thread worker_;

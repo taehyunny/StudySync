@@ -2,6 +2,7 @@
 #include "StudySyncClientView.h"
 #include "network/WinHttpClient.h"
 
+#include <chrono>
 #include <windows.h>
 #include <sstream>
 
@@ -43,7 +44,7 @@ CStudySyncClientView::CStudySyncClientView()
     , ai_tcp_client_(send_buffer_, shadow_buffer_, event_queue_, result_buffer_, transport_config_.jpeg_quality)
     , dummy_generator_(result_buffer_, shadow_buffer_, event_queue_)
     , event_upload_thread_(event_queue_, *transports_.clip_store, *transports_.log_sink)
-    , alert_dispatch_thread_(alert_queue_)
+    , alert_dispatch_thread_(alert_queue_, toast_buffer_)
     , ai_heartbeat_("AI Server",    transport_config_.ai_server_host + ":9100")
     , main_heartbeat_("Main Server", transport_config_.main_server_url)
     , clip_garbage_collector_(transport_config_.clip_directory,
@@ -67,6 +68,12 @@ void CStudySyncClientView::set_session_id(long long session_id,
     if (transports_.log_sink) {
         transports_.log_sink->set_session_id(session_id);
     }
+
+    // 세션 타이머 시작 (steady_clock 기준)
+    session_start_steady_ms_ = static_cast<std::uint64_t>(
+        std::chrono::duration_cast<std::chrono::milliseconds>(
+            std::chrono::steady_clock::now().time_since_epoch()).count());
+    render_thread_.set_session_start_ms(session_start_steady_ms_);
 }
 
 // ── 윈도우 메시지 ──────────────────────────────────────────────
@@ -78,8 +85,15 @@ int CStudySyncClientView::OnCreate(LPCREATESTRUCT lpCreateStruct)
     capture_thread_.start(0, transport_config_.capture_fps);
     render_thread_.start(m_hWnd, result_buffer_);
 
+    // 토스트 버퍼 연결 (렌더 스레드 시작 직후, 렌더링 시작 전)
+    render_thread_.set_toast_buffer(&toast_buffer_);
+
     if (transport_config_.use_dummy_ai) {
         // AI 서버 없이 더미 분석결과로 전체 파이프라인 테스트
+        // AlertManager 콜백 등록 → 자세/졸음 감지 시 toast_buffer_에 기록
+        dummy_generator_.set_result_callback([this](const AnalysisResult& r) {
+            alert_manager_.feed_local_analysis(r);
+        });
         dummy_generator_.start(transport_config_.dummy_interval_ms);
     } else {
         ai_tcp_client_.start(
