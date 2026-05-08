@@ -106,16 +106,19 @@ std::string JsonlBatchUploader::to_jsonl(const AnalysisResult& result) const
 {
     std::ostringstream out;
     out << "{\"kind\":\"analysis\""
-        << ",\"session_id\":"   << session_id_
-        << ",\"timestamp_ms\":" << result.timestamp_ms
-        << ",\"focus_score\":"  << result.focus_score
-        << ",\"state\":\""      << escape_json(result.state) << "\""
-        << ",\"neck_angle\":"   << result.neck_angle
+        << ",\"session_id\":"    << session_id_
+        << ",\"timestamp_ms\":"  << result.timestamp_ms
+        << ",\"focus_score\":"   << result.focus_score
+        << ",\"state\":\""       << escape_json(result.state) << "\""
+        << ",\"ear\":"           << result.ear
+        << ",\"neck_angle\":"    << result.neck_angle
         << ",\"shoulder_diff\":" << result.shoulder_diff
-        << ",\"ear\":"          << result.ear
-        << ",\"posture_ok\":"   << (result.posture_ok ? "true" : "false")
-        << ",\"drowsy\":"       << (result.drowsy     ? "true" : "false")
-        << ",\"absent\":"       << (result.absent     ? "true" : "false")
+        << ",\"head_yaw\":"      << result.head_yaw
+        << ",\"head_pitch\":"    << result.head_pitch
+        << ",\"face_detected\":" << result.face_detected
+        << ",\"posture_ok\":"    << (result.posture_ok ? "true" : "false")
+        << ",\"drowsy\":"        << (result.drowsy     ? "true" : "false")
+        << ",\"absent\":"        << (result.absent     ? "true" : "false")
         << "}";
     return out.str();
 }
@@ -128,6 +131,7 @@ std::string JsonlBatchUploader::to_jsonl(const PostureEvent& event) const
         << ",\"event_id\":\""   << escape_json(event.event_id) << "\""
         << ",\"timestamp_ms\":" << event.timestamp_ms
         << ",\"reason\":\""     << escape_json(event.reason) << "\""
+        << ",\"confidence\":"   << event.confidence
         << ",\"frame_count\":"  << event.frames.size()
         << "}";
     return out.str();
@@ -153,20 +157,3 @@ std::string JsonlBatchUploader::to_jsonl(const PostureEvent& event, const ClipRe
     return out.str();
 }
 
-std::string JsonlBatchUploader::to_jsonl(const PostureEvent& event, const ClipRef& clip_ref)
-{
-    std::ostringstream out;
-    out << "{\"kind\":\"event\""
-        << ",\"timestamp_ms\":" << event.timestamp_ms
-        << ",\"reason\":\"" << escape_json(event.reason) << "\""
-        << ",\"frame_count\":" << clip_ref.frame_count
-        << ",\"clip_id\":\"" << escape_json(clip_ref.clip_id) << "\""
-        << ",\"clip_ref\":\"" << escape_json(clip_ref.uri) << "\""
-        << ",\"clip_access\":\"" << escape_json(clip_ref.access_kind) << "\""
-        << ",\"clip_format\":\"" << escape_json(clip_ref.format) << "\""
-        << ",\"retention_days\":" << clip_ref.retention_days
-        << ",\"created_at_ms\":" << clip_ref.created_at_ms
-        << ",\"expires_at_ms\":" << clip_ref.expires_at_ms
-        << "}";
-    return out.str();
-}

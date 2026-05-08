@@ -1,5 +1,6 @@
 #include "pch.h"
 #include "MainFrm.h"
+#include "ReviewDlg.h"
 #include "StudySyncClientView.h"
 #include "network/SessionApi.h"
 #include "network/WinHttpClient.h"
@@ -12,6 +13,7 @@
 
 BEGIN_MESSAGE_MAP(CMainFrame, CFrameWnd)
     ON_WM_CREATE()
+    ON_WM_CLOSE()
 END_MESSAGE_MAP()
 
 CMainFrame::CMainFrame(int user_id) noexcept
@@ -34,7 +36,6 @@ int CMainFrame::OnCreate(LPCREATESTRUCT lpCreateStruct)
                   WS_CHILD | WS_VISIBLE, rect, this, AFX_IDW_PANE_FIRST);
 
     // ── 세션 시작 ────────────────────────────────────────────
-    // 현재 시각을 ISO8601로 구성하여 메인서버에 POST /session/start 전송
     SYSTEMTIME st;
     GetLocalTime(&st);
     char iso[32];
@@ -48,10 +49,25 @@ int CMainFrame::OnCreate(LPCREATESTRUCT lpCreateStruct)
     if (result.success && result.session_id > 0) {
         view_->set_session_id(result.session_id, iso);
     } else {
-        // 세션 시작 실패 — 오프라인 모드로 진행 (session_id = 0)
-        // AI서버로의 프레임 전송은 동작하나 메인서버 DB에 기록 안 됨
         OutputDebugStringA("[StudySync] session/start failed — running offline\n");
     }
 
     return 0;
+}
+
+// ── 세션 종료 — 복기 화면 표시 후 창 닫기 ─────────────────────────
+
+void CMainFrame::OnClose()
+{
+    // View가 살아있고, 복기 대상 이벤트가 있으면 ReviewDlg를 먼저 열기
+    if (view_) {
+        ReviewEventStore& store = view_->review_store();
+        if (store.count_uncertain() > 0) {
+            ReviewDlg dlg(store, view_->session_id(), this);
+            dlg.DoModal();
+        }
+    }
+
+    // 뷰 소멸 → OnDestroy → 세션 종료 API, 스레드 정리
+    CFrameWnd::OnClose();
 }

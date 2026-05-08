@@ -10,8 +10,8 @@ void PostureEventDetector::set_callback(EventCallback cb)
 
 void PostureEventDetector::feed(const AnalysisResult& result, const EventShadowBuffer& shadow)
 {
-    bad_posture_streak_ = (result.neck_angle > 25.0 || !result.posture_ok) ? bad_posture_streak_ + 1 : 0;
-    drowsy_streak_ = (result.ear < 0.25 || result.drowsy) ? drowsy_streak_ + 1 : 0;
+    bad_posture_streak_ = (result.neck_angle > neck_threshold_ || !result.posture_ok) ? bad_posture_streak_ + 1 : 0;
+    drowsy_streak_ = (result.ear < ear_threshold_ || result.drowsy) ? drowsy_streak_ + 1 : 0;
 
     if (event_cooldown_) {
         if (bad_posture_streak_ == 0 && drowsy_streak_ == 0) {
@@ -50,9 +50,10 @@ void PostureEventDetector::emit_event(PostureEventType type, const char* reason,
         : static_cast<std::uint64_t>(
               std::chrono::duration_cast<std::chrono::milliseconds>(
                   std::chrono::system_clock::now().time_since_epoch()).count());
-    event.event_id = "evt-" + std::to_string(event.timestamp_ms);
-    event.reason   = reason;
-    event.frames   = shadow.snapshot(30);
+    event.event_id  = "evt-" + std::to_string(event.timestamp_ms);
+    event.reason    = reason;
+    event.confidence = result.confidence;
+    event.frames    = shadow.snapshot(30);
     callback_(std::move(event));
 }
 

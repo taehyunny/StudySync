@@ -38,6 +38,10 @@ public:
     using ResultCallback = std::function<void(const AnalysisResult&)>;
     void set_result_callback(ResultCallback cb) { result_callback_ = std::move(cb); }
 
+    // 캘리브레이션 완료 후 자세 임계값 갱신 (스레드 안전: atomic setter 위임)
+    void set_neck_threshold(double deg) { detector_.set_neck_threshold(deg); }
+    void set_ear_threshold(float val)   { detector_.set_ear_threshold(val);  }
+
 private:
     void run(int interval_ms);
 

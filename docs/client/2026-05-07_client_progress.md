@@ -1,162 +1,191 @@
 # StudySync 클라이언트 구현 진행 현황
 
-작성일: 2026-05-07  
-브랜치: feature/taehyun  
+작성일: 2026-05-07 (최종 업데이트)  
+브랜치: `feature/taehyun`  
 작성자: 정태현 (클라이언트 담당)
 
 ---
 
-## 현재 상태 요약
+## 전체 진행률 요약
 
-메인서버 통합 테스트 전 항목 통과 확인 (2026-05-07).  
-클라이언트 핵심 블로커 2개 해소 + SessionApi 버그 수정 완료.  
-데이터 흐름 파이프라인 연결 완성. AI 서버 없이 메인서버 실 연동 테스트 가능 상태.
+| 영역 | 상태 |
+|------|------|
+| 렌더링 파이프라인 (D2D HUD) | ✅ 완료 |
+| 로그인 / 회원가입 UI | ✅ 완료 |
+| 메인서버 HTTP 연동 | ✅ 완료 |
+| 분석 데이터 로그 전송 | ✅ 완료 |
+| DummyAnalysisGenerator (더미 AI) | ✅ 완료 |
+| 세션 타이머 HUD | ✅ 완료 |
+| 토스트 알림 | ✅ 완료 |
+| 캘리브레이션 (기준 자세 설정) | ✅ 완료 |
+| 통계 다이어그램 (집중도 그래프) | ✅ 완료 |
+| 휴식 권장 알림 오버레이 | ✅ 완료 |
+| **Stage 1: MediaPipe 이관 + keypoint 전송** | ✅ 완료 |
+| AI 서버 TCP 실 연동 (use_dummy_ai=false) | 🔵 대기 (AI팀 준비 후) |
+| 피드백 UI — 복기 화면 (맞아요/틀렸어요) | 🔴 2단계 미구현 |
+| POST /feedback 업로드 | 🔴 3단계 미구현 |
+| 세션 종료 불확실 판정 팝업 | 🔴 3단계 미구현 |
+| 서버 통계 API 화면 연결 | 🟡 미구현 |
+| 목표 설정 UI | 🟡 미구현 |
+| 이메일 인증 처리 | 🟡 미구현 |
+| 토큰 만료 / 자동 재로그인 | 🟡 미구현 |
+| 이벤트 클립 MP4 인코딩 | 🟡 미구현 (포맷 미확정) |
+
+> 상세 잔여 작업 목록: [`TODO.md`](./TODO.md)
 
 ---
 
-## 완료된 작업 목록
+## ✅ Stage 1 완료 (2026-05-07)
 
-### ✅ 아키텍처 / 렌더링
+### 변경 요약
+
+| 항목 | 이전 | 이후 |
+|---|---|---|
+| AI 서버 전송 방식 | JPEG 이미지 (~100KB, 5fps) | keypoint JSON (~100B, 30fps 가능) |
+| 클라이언트 분석 | 없음 | OpenCV Haar cascade placeholder |
+| TCP 패킷 | header + JSON + binary | header + JSON only (바이너리 없음) |
+| AnalysisResult | ear, neck_angle, shoulder_diff | + head_yaw, head_pitch, face_detected, confidence |
+| JSONL 로그 | 기존 5개 필드 | 9개 필드 (신규 4개 추가) |
+
+### 변경 파일
+
+| 파일 | 변경 내용 |
+|---|---|
+| `include/model/AnalysisResult.h` | head_yaw, head_pitch, face_detected, confidence 추가 |
+| `include/analysis/LocalMediaPipePoseAnalyzer.h` | CascadeClassifier 멤버, detect_ear() 추가 |
+| `src/analysis/LocalMediaPipePoseAnalyzer.cpp` | OpenCV Haar 기반 keypoint 추출 구현 |
+| `include/network/AiTcpClient.h` | pose_analyzer_ 멤버, send_keypoint_packet() 선언 |
+| `src/network/AiTcpClient.cpp` | JPEG 전송 → keypoint JSON 전송으로 교체 |
+| `src/network/JsonlBatchUploader.cpp` | JSONL에 head_yaw/pitch/face_detected 포함 |
+| `src/analysis/DummyAnalysisGenerator.cpp` | 더미 시나리오 신규 필드 값 추가 |
+
+### AI 서버 통신 현황
+
+| 항목 | 상태 |
+|---|---|
+| 프로토콜 | TCP, 포트 9100 |
+| 패킷 형식 | 4-byte big-endian 길이 + JSON |
+| 전송 방향 (클라 → AI) | keypoint JSON (protocol_no: 2000) |
+| 수신 방향 (AI → 클라) | state/confidence/focus_score (protocol_no: 2001) |
+| phone_detected | 사용 안 함 |
+| JPEG/binary | 사용 안 함 |
+
+프로토콜 상세: [`docs/ai_client_tcp_protocol.md`](../ai_client_tcp_protocol.md)
+
+---
+
+## ✅ 이전 완료 작업
+
+### 아키텍처 / 렌더링
 
 | 항목 | 내용 |
-|------|------|
+|---|---|
 | MFC 프로젝트 구조 | CWinApp → CMainFrame → CStudySyncClientView 계층 완성 |
 | Direct2D 렌더링 파이프라인 | CaptureThread → RingBuffer → RenderThread → D2DRenderer → HWND |
-| OverlayPainter HUD | 집중도 바, 상태 점, 자세, 목각도, EAR 바, 어깨차 — DirectWrite 패널 |
+| OverlayPainter HUD | 집중도 바, 상태 점, 자세/목각도/EAR/어깨차 DirectWrite 패널 |
 | AnalysisResultBuffer | AiTcpClient(쓰기) ↔ D2DRenderer(읽기) 스레드 안전 공유 버퍼 |
+| 세션 타이머 | 좌상단 `HH:MM:SS` steady_clock 기반 표시 |
+| 토스트 알림 | ToastBuffer + draw_toast() 좌상단 빨간 배너 (4초 자동 소멸) |
+| 캘리브레이션 오버레이 | 세션 시작 5초 카운트다운, 기준 자세 수집 후 목각도 임계값 자동 설정 |
+| 통계 다이어그램 | SessionStatsHistory 링버퍼(150샘플) + 좌하단 꺾은선 그래프 패널 |
+| 휴식 권장 알림 | 졸음/자세불량 이벤트 시 중앙 대형 오버레이 8초 노출 |
 
-### ✅ 네트워크 — AI 서버 TCP
-
-| 항목 | 내용 |
-|------|------|
-| AiTcpClient | 프레임 전송(2000) + 분석결과 수신(2001) 구현 완료 |
-| 프로토콜 | 4-byte BE 헤더 + JSON + JPEG binary |
-| 자동 재연결 | 연결 끊김 시 2초 후 재시도 루프 |
-| ZMQ 제거 | ZmqSendThread, ZmqRecvThread, AiAnalyzeThread 전면 교체 |
-
-### ✅ 네트워크 — 메인서버 HTTP
+### 네트워크 — AI 서버 TCP
 
 | 항목 | 내용 |
-|------|------|
-| WinHttpClient | GET / POST JSON / POST NDJSON 지원, JWT Bearer 자동 주입 |
-| AuthApi | /auth/login, /auth/register — access_token 우선 파싱, detail fallback |
-| SessionApi | /session/start → session_id, /session/end → focus_min/avg_focus/goal_achieved |
+|---|---|
+| AiTcpClient | keypoint 전송 + 분석결과 수신 (TCP 9100) |
+| 자동 재연결 | 연결 끊김 시 2초 간격 재시도 루프 |
+| DummyAnalysisGenerator | AI 서버 없이 30초 주기 더미 결과 생성 (use_dummy_ai=true) |
+
+### 네트워크 — 메인서버 HTTP
+
+| 항목 | 내용 |
+|---|---|
+| WinHttpClient | GET / POST JSON / POST NDJSON, JWT Bearer 자동 주입 |
+| URL path 버그 수정 | 절대 URL → path 자동 추출 (방어 코드 포함) |
+| AuthApi | /auth/login, /auth/register |
+| SessionApi | /session/start → session_id, /session/end → 통계 반환 |
+| StatsApi | /stats/today → ServerStatsSnapshot (HUD 초안 연결) |
 | TokenStore | %APPDATA%/StudySync/token.dat 저장/복원 |
+| HeartbeatClient × 2 | 메인서버 / AI서버 연결 상태 주기 모니터링 |
 
-### ✅ 로그 파이프라인 (B1 + B2 — 2026-05-07 완료)
-
-| 항목 | 내용 |
-|------|------|
-| **B1** `flush_to_http` 구현 | NDJSON POST to `/log/ingest`, accepted/skipped 파싱 로그 |
-| **B1** `post_ndjson()` | WinHttpClient에 application/x-ndjson Content-Type 추가 |
-| **B2** `session_id` 필드 | 모든 JSONL 라인에 session_id 포함 (서버 소유권 검증 필수) |
-| **B2** `event_id` 필드 | PostureEvent에 event_id 추가, `"evt-{timestamp_ms}"` 자동 생성 |
-| **B2** `set_session_id()` | ILogSink → HttpJsonlLogSink → JsonlBatchUploader 위임 체인 |
-| **B2** View 연결 | set_session_id() 호출 시 log_sink에 자동 주입 |
-
-### ✅ UI — 로그인 / 회원가입
+### 로그 파이프라인
 
 | 항목 | 내용 |
-|------|------|
-| LoginDlg | IDD_LOGIN 다이얼로그, AuthApi::login() 연결 |
-| RegisterDlg | IDD_REGISTER 다이얼로그, AuthApi::register_user() 연결 |
-| 에러 표시 | message + detail 두 필드 합쳐서 IDC_STATIC_MSG 표시 |
-| 세션 흐름 | 로그인 성공 → SessionApi::start() → session_id → View 전달 |
+|---|---|
+| JsonlBatchUploader | NDJSON POST /log/ingest, accepted/skipped 파싱 |
+| 분석 데이터 전송 | result_callback → append_analysis() → 10초 주기 flush |
+| 이벤트 데이터 전송 | EventUploadThread → append_event_metadata() → 즉시 flush |
+| 세션 종료 flush | OnDestroy에서 잔여 데이터 최종 전송 |
+| 확인된 서버 응답 | `accepted(analysis=47~50, event=1)` 200 OK 반복 확인 |
 
-### ✅ 빌드 / 인프라
+### 이벤트 / 알림 파이프라인
 
 | 항목 | 내용 |
-|------|------|
-| CMake + VS2022 | configure + MSBuild Debug x64 빌드 성공 |
-| /utf-8 플래그 | 한국어 소스 인코딩 문제 해소 |
-| dwrite 링크 | DirectWrite HUD 렌더링 링크 추가 |
-| ws2_32 링크 | Winsock2 TCP 링크 추가 |
+|---|---|
+| PostureEventDetector | neck_threshold 런타임 설정 (캘리브레이션 결과 적용) |
+| AlertManager | 자세불량/졸음/집중저하 로컬 판단, AlertQueue 전달 |
+| AlertDispatchThread | ToastBuffer 토스트 + RenderThread 휴식 오버레이 동시 트리거 |
+| EventUploadThread | 이벤트 발생 시 ClipStore 저장 + 서버 즉시 전송 |
+
+### UI
+
+| 항목 | 내용 |
+|---|---|
+| LoginDlg | IDD_LOGIN, AuthApi::login() 연결 |
+| RegisterDlg | IDD_REGISTER, AuthApi::register_user() 연결 |
+| 에러 표시 | message + detail 두 필드 통합 표시 |
+| 세션 흐름 | 로그인 → SessionApi::start() → session_id → View |
 
 ---
 
-## 현재 JSONL 라인 형식 (서버 계약 기준)
+## 데이터 흐름 전체 구조 (2026-05-07 기준)
 
-```jsonl
-{"kind":"analysis","session_id":1001,"timestamp_ms":1746514205123,"focus_score":85,"state":"focus","neck_angle":12.3,"shoulder_diff":3.1,"ear":0.35,"posture_ok":true,"drowsy":false,"absent":false}
-{"kind":"event","session_id":1001,"event_id":"evt-1746514210000","timestamp_ms":1746514210000,"reason":"neck_angle over threshold","frame_count":30,"clip_id":"...","clip_ref":"local://..."}
+```
+[로그인]  LoginDlg → AuthApi → /auth/login → access_token → WinHttpClient
+[세션]    MainFrm → SessionApi → /session/start → session_id → View::set_session_id()
+
+[캡처]    CaptureThread (30fps) → 3개 버퍼 분기
+            ├─ RenderFrameBuffer → RenderThread → D2DRenderer → OverlayPainter
+            ├─ SendFrameBuffer   → AiTcpClient (use_dummy_ai=false 시)
+            └─ EventShadowBuffer → EventUploadThread
+
+[더미AI]  DummyAnalysisGenerator (200ms 주기, use_dummy_ai=true)
+            → result_callback
+               ├─ SessionStatsHistory.push()    ← 통계 그래프용
+               ├─ log_sink.append_analysis()    ← 10초 배치 전송
+               └─ AlertManager.feed_local()     ← 알림 판단
+                    └─ AlertDispatchThread
+                         ├─ ToastBuffer (토스트, 4초)
+                         └─ RenderThread.set_break_alert() (오버레이, 8초)
+
+[실AI]    AiTcpClient (use_dummy_ai=false)
+            → LocalMediaPipePoseAnalyzer (OpenCV Haar, placeholder)
+               → keypoint JSON (protocol 2000)
+                  → AI 서버 TCP 9100
+                     → ANALYSIS_RES (protocol 2001)
+                        → AnalysisResultBuffer + PostureEventDetector
+
+[이벤트]  PostureEventDetector → EventQueue
+          EventUploadThread → LocalClaimCheckClipStore
+                            → log_sink.append_event_metadata() + flush()
+                            → POST /log/ingest (즉시)
+
+[배치]    IDT_LOG_FLUSH (10초) → log_sink.flush() → POST /log/ingest
+[종료]    OnDestroy → log_sink.flush() → SessionApi::end()
 ```
 
 ---
 
-## 남은 작업 목록
-
-### ✅ C3 완료 — SessionApi 버그 수정 (2026-05-07)
-
-`goal_achieved`가 JSON 불린(`true`/`false`)인데 문자열 파서로 읽어 **항상 false** 반환하던 버그 수정.  
-`extract_bool()` 헬퍼 추가. 세션 종료 실패 시 에러 로그 출력 추가.
-
----
-
-### 🔴 높음
-
-| # | 항목 | 내용 |
-|---|------|------|
-| D1 | DummyAnalysisGenerator | AI 서버 없이 더미 분석결과로 전체 로그 흐름 실 서버 테스트 |
-
-### 🟡 중간
-
-| # | 항목 | 내용 |
-|---|------|------|
-| D2 | 통계 대시보드 UI | StatsApi + /stats/today, /hourly, /weekly, /pattern 화면 연결 |
-| D3 | 목표 설정 UI | GoalApi + /goal POST/GET 연결 |
-
-### 🔵 후순위 (AI팀 준비 후)
-
-| # | 항목 | 내용 |
-|---|------|------|
-| E1 | AiTcpClient 실연동 | AI팀 포트 9100 준비 후 실제 연결 테스트 |
-| E2 | 더미 → 실제 AI 전환 | DummyAnalysisGenerator 비활성화 후 AiTcpClient 결과로 전환 |
-
----
-
-## 데이터 흐름 전체 구조 (현재 기준)
-
-```
-[로그인] LoginDlg → AuthApi → WinHttpClient → /auth/login
-                                              → TokenStore 저장
-[세션]   StudySyncClientApp → SessionApi → /session/start → session_id
-                                         → View::set_session_id()
-                                         → log_sink::set_session_id()
-
-[캡처]   CaptureThread → RingBuffer ──────────────────────────────┐
-                                                                   │
-[렌더]   RenderThread ← RingBuffer                                 │
-         D2DRenderer.upload_and_render()                           │
-         OverlayPainter.draw(AnalysisResult) ← AnalysisResultBuffer
-                                                     ↑
-[AI TCP] AiTcpClient ─── FRAME_PUSH(2000) ──→ AI서버(9100)       │
-         recv ANALYSIS_RES(2001) ───────────────────────────────── ┘
-         result_buffer_.update()
-         PostureEventDetector.feed() → EventQueue
-
-[로그]   EventUploadThread → clip_store_.store_clip()
-                           → log_sink_.append_event_metadata()
-                           → log_sink_.flush()
-                           → JsonlBatchUploader.flush_to_http()
-                           → WinHttpClient.post_ndjson(/log/ingest)
-                           → HTTP 200 : accepted/skipped 로그 출력
-
-[세션종료] OnDestroy → SessionApi::end() → /session/end
-                     → focus_min / avg_focus / goal_achieved 출력
-```
-
----
-
-## 메인서버 연동 테스트 통과 항목 (2026-05-07 서버팀 확인)
+## 메인서버 연동 실 확인 항목 (2026-05-07)
 
 | 시나리오 | 결과 |
 |---------|------|
-| 회원가입/로그인 (access_token + token alias) | 200/201 ✓ |
-| /goal POST/GET | 200 ✓ |
-| /session/start | 200 ✓ |
-| /log/ingest 30라인 (analysis 25 + event 5) | accepted: {analysis:25, event:5}, skipped:0 ✓ |
-| /log/ingest 멱등 재전송 (같은 event_id) | DB 변경 없이 success ✓ |
-| /log/ingest 남의 세션 차단 | skipped:1 ✓ |
-| /session/end | focus_min(INT), avg_focus(0.84), goal_achieved(bool) ✓ |
-| /stats/today /hourly /weekly /pattern | 모두 200 ✓ |
-| 인증 실패 (401) | message + detail 두 필드 ✓ |
+| /auth/register, /auth/login | ✅ 200/201 |
+| /session/start | ✅ session_id 수신 |
+| /log/ingest 분석 데이터 배치 | ✅ accepted(analysis=47~50) 200 OK |
+| /log/ingest 이벤트 데이터 | ✅ accepted(event=1) 200 OK |
+| /session/end | ✅ focus_min / avg_focus / goal_achieved 수신 |
+| Main Server Heartbeat | ✅ status=Connected failures=0 |
+| AI Server Heartbeat | 🔄 status=Reconnecting (더미 모드라 정상) |

@@ -12,9 +12,9 @@
 //   - TcpListener 스레드가 블로킹되지 않아 수신 throughput 저하 없음.
 //
 // 큐 오버플로우 정책:
-//   max_queue_size (config.limits.event_queue_max, 기본 10000) 초과 시 드롭 + 로그.
-//   백프레셔를 호출자에 반환하지 않는 이유: 드롭은 drop-tail 단일 방식이라
-//   복잡도 낮고, 정상 운영에서는 이 상한에 거의 도달하지 않음.
+//   - 일반 이벤트: max_queue_size 초과 시 드롭 + 카운터 증가.
+//   - ACK 필요 이벤트: 별도 우선 큐에 넣고, 포화 시 제한 시간 동안 백프레셔.
+//     제한 시간 안에 공간이 안 나면 드롭 + 카운터 증가. 워커는 우선 큐를 먼저 처리.
 //
 // 핸들러 실행 순서 보장:
 //   같은 EventType 에 여러 핸들러 구독 시 "구독 등록 순서대로" 순차 호출.
@@ -30,9 +30,12 @@
 
 namespace factory {
 
-EventBus::EventBus(int worker_count, std::size_t max_queue_size)
+EventBus::EventBus(int worker_count,
+                   std::size_t max_queue_size,
+                   std::size_t max_critical_queue_size)
     : worker_count_(worker_count),
       max_queue_size_(max_queue_size),
+      max_critical_queue_size_(max_critical_queue_size == 0 ? 1 : max_critical_queue_size),
       is_running_(false) {
 }
 
@@ -66,6 +69,7 @@ void EventBus::stop() {
     if (!is_running_.exchange(false)) return;
 
     queue_cv_.notify_all();
+    queue_space_cv_.notify_all();
 
     for (auto& w : workers_) {
         if (w.joinable()) w.join();
@@ -85,21 +89,83 @@ void EventBus::subscribe(EventType type, Handler handler) {
 }
 
 // ---------------------------------------------------------------------------
-// publish — 이벤트를 큐에 적재하고 워커 1명 깨움
+// publish — 이벤트를 일반 큐에 적재하고 워커 1명 깨움
 // std::any 로 payload 를 타입 이레이저로 감싸 모든 종류의 이벤트를 단일 큐에
 // 담을 수 있음. 핸들러가 std::any_cast 로 복원.
-// 큐 포화 시: drop-tail (오래된 것을 남기고 신규 드롭) — 로그만 남기고 return.
+// 큐 포화 시: drop-tail (오래된 것을 남기고 신규 드롭) — false 반환.
 // ---------------------------------------------------------------------------
-void EventBus::publish(EventType type, std::any payload) {
+bool EventBus::publish(EventType type, std::any payload) {
     {
         std::lock_guard<std::mutex> lock(queue_mutex_);
         if (event_queue_.size() >= max_queue_size_) {
-            log_err_main("EventBus 큐 포화 | size=%zu — 이벤트 드롭", event_queue_.size());
-            return;
+            auto dropped = dropped_count_.fetch_add(1) + 1;
+            log_err_main("EventBus 일반 큐 포화 | size=%zu dropped=%llu — 이벤트 드롭",
+                         event_queue_.size(), static_cast<unsigned long long>(dropped));
+            return false;
         }
         event_queue_.push(Event{type, std::move(payload)});
+        published_count_.fetch_add(1);
+        update_high_water_locked(false);
     }
     queue_cv_.notify_one();  // 잠자고 있는 워커 하나 깨움
+    return true;
+}
+
+bool EventBus::publish_critical(EventType type, std::any payload,
+                                std::chrono::milliseconds timeout,
+                                bool front) {
+    {
+        std::unique_lock<std::mutex> lock(queue_mutex_);
+        bool has_space = queue_space_cv_.wait_for(lock, timeout, [this]() {
+            return critical_event_queue_.size() < max_critical_queue_size_ ||
+                   !is_running_.load();
+        });
+        if (!has_space || !is_running_.load()) {
+            auto dropped = critical_dropped_count_.fetch_add(1) + 1;
+            log_err_main("EventBus 우선 큐 포화 | size=%zu dropped=%llu — 중요 이벤트 드롭",
+                         critical_event_queue_.size(),
+                         static_cast<unsigned long long>(dropped));
+            return false;
+        }
+
+        if (front) {
+            critical_event_queue_.push_front(Event{type, std::move(payload)});
+        } else {
+            critical_event_queue_.push_back(Event{type, std::move(payload)});
+        }
+        critical_published_count_.fetch_add(1);
+        update_high_water_locked(true);
+    }
+    queue_cv_.notify_one();
+    return true;
+}
+
+EventBus::Stats EventBus::stats() const {
+    Stats s{};
+    s.published = published_count_.load();
+    s.critical_published = critical_published_count_.load();
+    s.dropped = dropped_count_.load();
+    s.critical_dropped = critical_dropped_count_.load();
+    {
+        std::lock_guard<std::mutex> lock(queue_mutex_);
+        s.queue_size = event_queue_.size();
+        s.critical_queue_size = critical_event_queue_.size();
+        s.high_water_mark = high_water_mark_;
+        s.critical_high_water_mark = critical_high_water_mark_;
+    }
+    return s;
+}
+
+void EventBus::update_high_water_locked(bool critical) {
+    if (critical) {
+        if (critical_event_queue_.size() > critical_high_water_mark_) {
+            critical_high_water_mark_ = critical_event_queue_.size();
+        }
+        return;
+    }
+    if (event_queue_.size() > high_water_mark_) {
+        high_water_mark_ = event_queue_.size();
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -121,16 +187,26 @@ void EventBus::worker_loop() {
         {
             std::unique_lock<std::mutex> lock(queue_mutex_);
             queue_cv_.wait(lock, [this]() {
-                return !event_queue_.empty() || !is_running_.load();
+                return !critical_event_queue_.empty() ||
+                       !event_queue_.empty() ||
+                       !is_running_.load();
             });
 
             // 종료 신호 수신 + 큐도 비었다면 루프 탈출
-            if (!is_running_.load() && event_queue_.empty()) break;
-            if (event_queue_.empty()) continue;   // spurious wakeup 방어
+            if (!is_running_.load() &&
+                critical_event_queue_.empty() &&
+                event_queue_.empty()) break;
+            if (critical_event_queue_.empty() && event_queue_.empty()) continue;
 
-            event = std::move(event_queue_.front());
-            event_queue_.pop();
+            if (!critical_event_queue_.empty()) {
+                event = std::move(critical_event_queue_.front());
+                critical_event_queue_.pop_front();
+            } else {
+                event = std::move(event_queue_.front());
+                event_queue_.pop();
+            }
         }
+        queue_space_cv_.notify_one();
 
         // 핸들러 목록을 락 밖으로 복사 — 실행 중에 다른 스레드가 subscribe 가능
         std::vector<Handler> handlers_snapshot;

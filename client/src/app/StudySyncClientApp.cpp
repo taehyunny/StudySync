@@ -21,7 +21,7 @@ BOOL CStudySyncClientApp::InitInstance()
 
     // ── HTTP 클라이언트 / AuthApi 초기화 ─────────────────────
     // 메인서버 URL: config에서 읽는 구조이지만 지금은 하드코딩
-    WinHttpClient::instance().set_base_url("http://10.10.10.130:8080");
+    WinHttpClient::instance().set_base_url("http://10.10.10.130:8081");
 
     // 저장된 토큰 복원 시도 (자동 로그인 준비)
     const std::string saved_token = TokenStore().load();

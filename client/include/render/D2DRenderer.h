@@ -1,6 +1,8 @@
 #pragma once
 
 #include "model/AnalysisResultBuffer.h"
+#include "model/ServerStatsSnapshot.h"
+#include "model/SessionStatsHistory.h"
 #include "model/ToastBuffer.h"
 #include "render/OverlayPainter.h"
 
@@ -19,8 +21,12 @@ public:
     void notify_resize(UINT w, UINT h);
 
     // 세션 시작 이후 set_session_start_ms / set_toast_buffer 호출 (렌더 스레드 안전)
-    void set_session_start_ms(std::uint64_t ms)  { overlay_.set_session_start_ms(ms); }
-    void set_toast_buffer(ToastBuffer* tb)        { overlay_.set_toast_buffer(tb); }
+    void set_session_start_ms(std::uint64_t ms)      { overlay_.set_session_start_ms(ms); }
+    void set_toast_buffer(ToastBuffer* tb)            { overlay_.set_toast_buffer(tb); }
+    void set_calibration_countdown(int sec)           { overlay_.set_calibration_countdown(sec); }
+    void set_stats_history(SessionStatsHistory* h)    { overlay_.set_stats_history(h); }
+    void set_server_stats(ServerStatsSnapshot* s)      { overlay_.set_server_stats(s); }
+    void set_break_alert(std::uint64_t expire_ms)     { overlay_.set_break_alert(expire_ms); }
 
 private:
     bool recreate_target();

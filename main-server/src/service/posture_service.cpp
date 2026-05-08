@@ -43,7 +43,10 @@ void PostureService::on_posture_log_push(const std::any& payload) {
     ack.sender_addr = ev.sender_addr;
     ack.ack_ok      = (row_id > 0);
     if (!ack.ack_ok) ack.error_message = "posture_log_insert_failed";
-    event_bus_.publish(EventType::ACK_SEND_REQUESTED, ack);
+    if (!event_bus_.publish_critical(EventType::ACK_SEND_REQUESTED, ack,
+                                     std::chrono::milliseconds(200), true)) {
+        log_err_ack("POSTURE_LOG_ACK 큐잉 실패 | req=%s", ack.request_id.c_str());
+    }
 }
 
 void PostureService::on_posture_event_push(const std::any& payload) {
@@ -75,7 +78,10 @@ void PostureService::on_posture_event_push(const std::any& payload) {
     ack.sender_addr = ev.sender_addr;
     ack.ack_ok      = (row_id > 0);
     if (!ack.ack_ok) ack.error_message = "posture_event_insert_failed";
-    event_bus_.publish(EventType::ACK_SEND_REQUESTED, ack);
+    if (!event_bus_.publish_critical(EventType::ACK_SEND_REQUESTED, ack,
+                                     std::chrono::milliseconds(200), true)) {
+        log_err_ack("POSTURE_EVENT_ACK 큐잉 실패 | req=%s", ack.request_id.c_str());
+    }
 }
 
 void PostureService::on_baseline_capture(const std::any& payload) {
@@ -90,7 +96,10 @@ void PostureService::on_baseline_capture(const std::any& payload) {
     ack.request_id  = ev.request_id;
     ack.sender_addr = ev.sender_addr;
     ack.ack_ok      = true;
-    event_bus_.publish(EventType::ACK_SEND_REQUESTED, ack);
+    if (!event_bus_.publish_critical(EventType::ACK_SEND_REQUESTED, ack,
+                                     std::chrono::milliseconds(200), true)) {
+        log_err_ack("BASELINE_CAPTURE_ACK 큐잉 실패 | req=%s", ack.request_id.c_str());
+    }
 }
 
 } // namespace factory

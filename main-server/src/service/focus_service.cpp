@@ -36,7 +36,10 @@ void FocusService::on_focus_log_push(const std::any& payload) {
     ack.sender_addr = ev.sender_addr;
     ack.ack_ok      = (row_id > 0);
     if (!ack.ack_ok) ack.error_message = "focus_log_insert_failed";
-    event_bus_.publish(EventType::ACK_SEND_REQUESTED, ack);
+    if (!event_bus_.publish_critical(EventType::ACK_SEND_REQUESTED, ack,
+                                     std::chrono::milliseconds(200), true)) {
+        log_err_ack("FOCUS_LOG_ACK 큐잉 실패 | req=%s", ack.request_id.c_str());
+    }
 
     if (row_id > 0) {
         log_db("focus_log INSERT | id=%lld session=%lld score=%d state=%s",

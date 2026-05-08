@@ -74,8 +74,14 @@
     <ClInclude Include="include\model\AnalysisResultBuffer.h" />
     <ClInclude Include="include\model\Frame.h" />
     <ClInclude Include="include\model\PostureEvent.h" />
+    <ClInclude Include="include\model\ReviewEvent.h" />
+    <ClInclude Include="include\model\ReviewEventStore.h" />
+    <ClInclude Include="include\model\ServerStatsSnapshot.h" />
+    <ClInclude Include="include\model\SessionStatsHistory.h" />
     <ClInclude Include="include\model\ToastBuffer.h" />
     <ClInclude Include="include\model\User.h" />
+    <ClInclude Include="include\network\ConsentStore.h" />
+    <ClInclude Include="include\network\FeedbackApi.h" />
     <ClInclude Include="include\network\ConnectionState.h" />
     <ClInclude Include="include\network\EventUploadThread.h" />
     <ClInclude Include="include\network\ClientTransportConfig.h" />
@@ -91,6 +97,7 @@
     <ClInclude Include="include\network\LocalClaimCheckClipStore.h" />
     <ClInclude Include="include\network\LocalClipGarbageCollector.h" />
     <ClInclude Include="include\network\ReconnectPolicy.h" />
+    <ClInclude Include="include\network\StatsApi.h" />
     <ClInclude Include="include\network\TokenStore.h" />
     <ClInclude Include="include\network\WinHttpClient.h" />
     <ClInclude Include="include\network\ZmqFrameSender.h" />
@@ -103,6 +110,7 @@
     <ClInclude Include="src\app\framework.h" />
     <ClInclude Include="src\app\MainFrm.h" />
     <ClInclude Include="src\app\pch.h" />
+    <ClInclude Include="src\app\ReviewDlg.h" />
     <ClInclude Include="src\app\StudySyncClientApp.h" />
     <ClInclude Include="src\app\StudySyncClientView.h" />
     <ClInclude Include="src\app\targetver.h" />
@@ -115,6 +123,7 @@
     <ClCompile Include="src\alert\AlertManager.cpp" />
     <ClCompile Include="src\app\LoginDlg.cpp" />
     <ClCompile Include="src\app\MainFrm.cpp" />
+    <ClCompile Include="src\app\ReviewDlg.cpp" />
     <ClCompile Include="src\app\pch.cpp">
       <PrecompiledHeader>Create</PrecompiledHeader>
     </ClCompile>
@@ -129,6 +138,8 @@
     <ClCompile Include="src\network\ConnectionState.cpp" />
     <ClCompile Include="src\network\ZmqRecvThread.cpp" />
     <ClCompile Include="src\network\ZmqSendThread.cpp" />
+    <ClCompile Include="src\network\ConsentStore.cpp" />
+    <ClCompile Include="src\network\FeedbackApi.cpp" />
     <ClCompile Include="src\network\EventUploadThread.cpp" />
     <ClCompile Include="src\network\HeartbeatClient.cpp" />
     <ClCompile Include="src\network\ClientTransportConfig.cpp" />
@@ -140,6 +151,7 @@
     <ClCompile Include="src\network\LocalClipGarbageCollector.cpp" />
     <ClCompile Include="src\network\ReconnectPolicy.cpp" />
     <ClCompile Include="src\network\SessionApi.cpp" />
+    <ClCompile Include="src\network\StatsApi.cpp" />
     <ClCompile Include="src\network\TokenStore.cpp" />
     <ClCompile Include="src\network\WinHttpClient.cpp" />
     <ClCompile Include="src\network\ZmqFrameSender.cpp" />

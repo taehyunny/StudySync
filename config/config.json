@@ -22,7 +22,9 @@
   },
 
   "limits": {
+    "event_bus_workers": 4,
     "event_queue_max": 10000,
+    "critical_event_queue_max": 1024,
     "model_max_bytes": 524288000
   },
 

@@ -3,6 +3,7 @@
 #include <windows.h>
 #include <commctrl.h>
 
+// ── 로그인 ─────────────────────────────────────────────────────
 IDD_LOGIN DIALOGEX 0, 0, 260, 180
 STYLE DS_SETFONT | DS_MODALFRAME | DS_CENTER | WS_POPUP | WS_CAPTION | WS_SYSMENU
 CAPTION "StudySync - Login"
@@ -19,6 +20,7 @@ BEGIN
     PUSHBUTTON      "Cancel",         IDCANCEL,            55, 148,  65, 18
 END
 
+// ── 회원가입 ───────────────────────────────────────────────────
 IDD_REGISTER DIALOGEX 0, 0, 260, 200
 STYLE DS_SETFONT | DS_MODALFRAME | DS_CENTER | WS_POPUP | WS_CAPTION | WS_SYSMENU
 CAPTION "StudySync - Register"
@@ -35,4 +37,52 @@ BEGIN
     LTEXT           "",               IDC_STATIC_MSG2,     20, 118, 220, 12, SS_LEFT
     PUSHBUTTON      "Register",       IDOK,                80, 140,  65, 18
     PUSHBUTTON      "Cancel",         IDCANCEL,           160, 140,  65, 18
+END
+
+// ── 복기 화면 ─────────────────────────────────────────────────
+//  480 x 370 DLU (약 720 x 555 px @ 96dpi)
+//
+//  [헤더 문구]
+//  ┌──────────────────────────────────────┐  ListCtrl (report)
+//  │ 시각     │ 판정     │ 신뢰도 │ 피드백 │
+//  │ 14:30:05 │ 졸음 감지 │ ★★☆  │ -     │  ← confidence<0.70  노란 배경
+//  │ 14:45:12 │ 자세 불량 │ ★★★  │ -     │  ← 0.70~0.85
+//  │ 15:02:33 │ 졸음 감지 │ ★★★★ │ 없음  │  ← ≥0.85, 버튼 없음
+//  └──────────────────────────────────────┘
+//  이 판정이 맞나요?   [✓ 맞아요]  [✗ 틀렸어요]
+//                                         [닫기]
+
+IDD_REVIEW DIALOGEX 0, 0, 480, 370
+STYLE DS_SETFONT | DS_MODALFRAME | DS_CENTER | WS_POPUP | WS_CAPTION | WS_SYSMENU
+CAPTION "학습 복기"
+FONT 9, "Segoe UI"
+BEGIN
+    // 헤더 문구
+    LTEXT           "",
+                    IDC_STATIC_REVIEW_HEADER,  10,   8, 460, 14
+
+    // 이벤트 목록 (SysListView32 = CListCtrl)
+    CONTROL         "",
+                    IDC_LIST_EVENTS,
+                    "SysListView32",
+                    LVS_REPORT | LVS_SINGLESEL | LVS_SHOWSELALWAYS | LVS_NOSORTHEADER | WS_BORDER | WS_TABSTOP,
+                    10,  26, 460, 286
+
+    // 피드백 패널 (하단)
+    LTEXT           "이 판정이 맞나요?",
+                    IDC_STATIC_QUESTION,       10, 322, 130, 14
+
+    PUSHBUTTON      "✓  맞아요",
+                    IDC_BTN_CORRECT,          148, 318,  80, 20
+
+    PUSHBUTTON      "✗  틀렸어요",
+                    IDC_BTN_WRONG,            236, 318,  80, 20
+
+    // 피드백 완료 문구 (버튼 자리를 대체, 초기엔 숨김)
+    LTEXT           "",
+                    IDC_STATIC_FEEDBACK_DONE, 148, 322, 168, 14
+
+    // 닫기
+    PUSHBUTTON      "닫기",
+                    IDCANCEL,                 396, 344,  74, 18
 END
