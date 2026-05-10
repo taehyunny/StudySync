@@ -1,6 +1,9 @@
 #include "pch.h"
 #include "render/RenderThread.h"
 
+#include <chrono>
+#include <opencv2/core/mat.hpp>
+
 RenderThread::RenderThread(CaptureThread::RenderFrameBuffer& frame_buffer)
     : frame_buffer_(frame_buffer)
 {
@@ -40,16 +43,22 @@ void RenderThread::run(HWND hwnd, AnalysisResultBuffer* result_buffer)
         return;
     }
 
-    while (running_) {
-        Frame frame = frame_buffer_.wait_pop();
-        if (!running_) {
-            break;
-        }
+    cv::Mat last_frame;
 
-        if (frame.mat.empty()) {
+    while (running_) {
+        auto frame_opt = frame_buffer_.wait_pop_for(std::chrono::milliseconds(33));
+        if (!running_) break;
+
+        if (!frame_opt || frame_opt->mat.empty()) {
+            if (!last_frame.empty()) {
+                renderer_.upload_and_render(last_frame);
+            } else {
+                renderer_.render_blank();
+            }
             continue;
         }
 
-        renderer_.upload_and_render(frame.mat);
+        last_frame = frame_opt->mat.clone();
+        renderer_.upload_and_render(last_frame);
     }
 }
