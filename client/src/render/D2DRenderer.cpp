@@ -81,8 +81,30 @@ void D2DRenderer::upload_and_render(const cv::Mat& bgr)
     render_target_->Clear(D2D1::ColorF(D2D1::ColorF::Black));
     render_target_->DrawBitmap(bitmap_.Get(), dest);
 
-    if (result_buffer_ && result_buffer_->has_data()) {
-        const AnalysisResult result = result_buffer_->read();
+    if (result_buffer_) {
+        const AnalysisResult result = result_buffer_->has_data()
+            ? result_buffer_->read() : AnalysisResult{};
+        overlay_.draw(render_target_.Get(), result);
+    }
+
+    const HRESULT hr = render_target_->EndDraw();
+    if (hr == D2DERR_RECREATE_TARGET) {
+        recreate_target();
+    }
+}
+
+void D2DRenderer::render_blank()
+{
+    if (!render_target_) return;
+
+    apply_pending_resize();
+
+    render_target_->BeginDraw();
+    render_target_->Clear(D2D1::ColorF(D2D1::ColorF::Black));
+
+    if (result_buffer_) {
+        const AnalysisResult result = result_buffer_->has_data()
+            ? result_buffer_->read() : AnalysisResult{};
         overlay_.draw(render_target_.Get(), result);
     }
 

@@ -4,3 +4,5 @@ StudySyncClient/
 x64/
 Debug/
 Release/
+packages/
+event_clips/

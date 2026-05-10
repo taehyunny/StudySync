@@ -11,54 +11,77 @@
     </ProjectConfiguration>
   </ItemGroup>
   <PropertyGroup Label="Globals">
-    <VCProjectVersion>17.0</VCProjectVersion>
+    <VCProjectVersion>18.0</VCProjectVersion>
     <ProjectGuid>{7C412E62-B75C-47B1-8C47-D2B38C71CC84}</ProjectGuid>
     <Keyword>MFCProj</Keyword>
     <RootNamespace>StudySyncClient</RootNamespace>
     <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
   </PropertyGroup>
   <PropertyGroup>
-    <OpenCVRoot Condition="'$(OpenCVRoot)'=='' and Exists('C:\opencv\build\include\opencv2\core\mat.hpp')">C:\opencv\build</OpenCVRoot>
+    <!-- 1순위: 환경변수 OPENCV_DIR (새 컴퓨터에서 이 값을 시스템 환경변수로 설정) -->
     <OpenCVRoot Condition="'$(OpenCVRoot)'=='' and '$(OPENCV_DIR)'!=''">$(OPENCV_DIR)</OpenCVRoot>
+    <!-- 2순위: 기본 설치 경로 자동 감지 -->
+    <OpenCVRoot Condition="'$(OpenCVRoot)'=='' and Exists('C:\opencv\build\include\opencv2\core\mat.hpp')">C:\opencv\build</OpenCVRoot>
+    <!-- 폴백: 기본 경로 (빌드 오류 시 OPENCV_DIR 환경변수를 설정할 것) -->
     <OpenCVRoot Condition="'$(OpenCVRoot)'==''">C:\opencv\build</OpenCVRoot>
+    <!-- vc17(VS2022) 우선, 없으면 vc16(VS2019) -->
+    <OpenCVLibDir Condition="'$(OpenCVLibDir)'=='' and Exists('$(OpenCVRoot)\x64\vc17\lib')">$(OpenCVRoot)\x64\vc17\lib</OpenCVLibDir>
+    <OpenCVLibDir Condition="'$(OpenCVLibDir)'==''">$(OpenCVRoot)\x64\vc16\lib</OpenCVLibDir>
     <OpenCVWorldLib Condition="'$(Configuration)'=='Debug'">opencv_world4120d.lib</OpenCVWorldLib>
     <OpenCVWorldLib Condition="'$(Configuration)'!='Debug'">opencv_world4120.lib</OpenCVWorldLib>
+    <OpenCVWorldDll Condition="'$(Configuration)'=='Debug'">opencv_world4120d.dll</OpenCVWorldDll>
+    <OpenCVWorldDll Condition="'$(Configuration)'!='Debug'">opencv_world4120.dll</OpenCVWorldDll>
+    <!-- vc17 bin 우선, 없으면 vc16 bin -->
+    <OpenCVBinDir Condition="'$(OpenCVBinDir)'=='' and Exists('$(OpenCVRoot)\x64\vc17\bin')">$(OpenCVRoot)\x64\vc17\bin</OpenCVBinDir>
+    <OpenCVBinDir Condition="'$(OpenCVBinDir)'==''">$(OpenCVRoot)\x64\vc16\bin</OpenCVBinDir>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="Configuration">
     <ConfigurationType>Application</ConfigurationType>
     <UseDebugLibraries>true</UseDebugLibraries>
-    <PlatformToolset>v143</PlatformToolset>
+    <PlatformToolset>v145</PlatformToolset>
     <UseOfMfc>Dynamic</UseOfMfc>
     <CharacterSet>Unicode</CharacterSet>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="Configuration">
     <ConfigurationType>Application</ConfigurationType>
     <UseDebugLibraries>false</UseDebugLibraries>
-    <PlatformToolset>v143</PlatformToolset>
+    <PlatformToolset>v145</PlatformToolset>
     <UseOfMfc>Dynamic</UseOfMfc>
     <WholeProgramOptimization>true</WholeProgramOptimization>
     <CharacterSet>Unicode</CharacterSet>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+  <PropertyGroup>
+    <!-- MFC atlmfc 경로 자동 감지: VCToolsInstallDir 우선, 없으면 14.44 폴백 (VS 2026/v18) -->
+    <AtlMfcIncDir Condition="'$(AtlMfcIncDir)'=='' and Exists('$(VCToolsInstallDir)atlmfc\include')">$(VCToolsInstallDir)atlmfc\include</AtlMfcIncDir>
+    <AtlMfcIncDir Condition="'$(AtlMfcIncDir)'=='' and Exists('C:\Program Files\Microsoft Visual Studio\18\Community\VC\Tools\MSVC\14.44.35207\atlmfc\include')">C:\Program Files\Microsoft Visual Studio\18\Community\VC\Tools\MSVC\14.44.35207\atlmfc\include</AtlMfcIncDir>
+    <AtlMfcIncDir Condition="'$(AtlMfcIncDir)'=='' and Exists('C:\Program Files\Microsoft Visual Studio\18\Community\VC\Tools\MSVC\14.42.34433\atlmfc\include')">C:\Program Files\Microsoft Visual Studio\18\Community\VC\Tools\MSVC\14.42.34433\atlmfc\include</AtlMfcIncDir>
+    <AtlMfcLibDir Condition="'$(AtlMfcLibDir)'=='' and Exists('$(VCToolsInstallDir)atlmfc\lib\x64')">$(VCToolsInstallDir)atlmfc\lib\x64</AtlMfcLibDir>
+    <AtlMfcLibDir Condition="'$(AtlMfcLibDir)'=='' and Exists('C:\Program Files\Microsoft Visual Studio\18\Community\VC\Tools\MSVC\14.44.35207\atlmfc\lib\x64')">C:\Program Files\Microsoft Visual Studio\18\Community\VC\Tools\MSVC\14.44.35207\atlmfc\lib\x64</AtlMfcLibDir>
+    <AtlMfcLibDir Condition="'$(AtlMfcLibDir)'=='' and Exists('C:\Program Files\Microsoft Visual Studio\18\Community\VC\Tools\MSVC\14.42.34433\atlmfc\lib\x64')">C:\Program Files\Microsoft Visual Studio\18\Community\VC\Tools\MSVC\14.42.34433\atlmfc\lib\x64</AtlMfcLibDir>
+  </PropertyGroup>
   <ItemDefinitionGroup>
     <ClCompile>
-      <AdditionalIncludeDirectories>src\app;include;res;$(OpenCVRoot)\include;$(ZMQ_DIR)\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>src\app;include;res;$(OpenCVRoot)\include;$(SolutionDir)packages\Microsoft.ML.OnnxRuntime.1.18.1\build\native\include;$(AtlMfcIncDir);%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <LanguageStandard>stdcpp17</LanguageStandard>
       <PrecompiledHeader>Use</PrecompiledHeader>
       <PrecompiledHeaderFile>pch.h</PrecompiledHeaderFile>
       <AdditionalOptions>/utf-8 %(AdditionalOptions)</AdditionalOptions>
     </ClCompile>
     <Link>
-      <AdditionalLibraryDirectories>$(OpenCVRoot)\x64\vc16\lib;$(ZMQ_DIR)\lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
-      <AdditionalDependencies>$(OpenCVWorldLib);d2d1.lib;dxgi.lib;winhttp.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalLibraryDirectories>$(OpenCVLibDir);$(SolutionDir)packages\Microsoft.ML.OnnxRuntime.1.18.1\runtimes\win-x64\native;$(AtlMfcLibDir);%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalDependencies>$(OpenCVWorldLib);d2d1.lib;dxgi.lib;winhttp.lib;onnxruntime.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClInclude Include="include\analysis\DummyAnalysisGenerator.h" />
     <ClInclude Include="include\analysis\IPoseAnalyzer.h" />
+    <ClInclude Include="src\app\ClipsPanel.h" />
+    <ClInclude Include="src\app\HomePanel.h" />
+    <ClInclude Include="src\app\SettingsPanel.h" />
+    <ClInclude Include="src\app\StatsPanel.h" />
     <ClInclude Include="include\analysis\LocalMediaPipePoseAnalyzer.h" />
-    <ClInclude Include="include\analysis\ZmqPoseAnalyzer.h" />
     <ClInclude Include="include\alert\AlertDispatchThread.h" />
     <ClInclude Include="include\alert\AlertManager.h" />
     <ClInclude Include="include\alert\AlertQueue.h" />
@@ -100,9 +123,6 @@
     <ClInclude Include="include\network\StatsApi.h" />
     <ClInclude Include="include\network\TokenStore.h" />
     <ClInclude Include="include\network\WinHttpClient.h" />
-    <ClInclude Include="include\network\ZmqFrameSender.h" />
-    <ClInclude Include="include\network\ZmqRecvThread.h" />
-    <ClInclude Include="include\network\ZmqSendThread.h" />
     <ClInclude Include="include\render\D2DRenderer.h" />
     <ClInclude Include="include\render\OverlayPainter.h" />
     <ClInclude Include="include\render\RenderThread.h" />
@@ -118,7 +138,10 @@
   <ItemGroup>
     <ClCompile Include="src\analysis\DummyAnalysisGenerator.cpp" />
     <ClCompile Include="src\analysis\LocalMediaPipePoseAnalyzer.cpp" />
-    <ClCompile Include="src\analysis\ZmqPoseAnalyzer.cpp" />
+    <ClCompile Include="src\app\ClipsPanel.cpp" />
+    <ClCompile Include="src\app\HomePanel.cpp" />
+    <ClCompile Include="src\app\SettingsPanel.cpp" />
+    <ClCompile Include="src\app\StatsPanel.cpp" />
     <ClCompile Include="src\alert\AlertDispatchThread.cpp" />
     <ClCompile Include="src\alert\AlertManager.cpp" />
     <ClCompile Include="src\app\LoginDlg.cpp" />
@@ -136,8 +159,6 @@
     <ClCompile Include="src\event\PostureEventDetector.cpp" />
     <ClCompile Include="src\network\AiTcpClient.cpp" />
     <ClCompile Include="src\network\ConnectionState.cpp" />
-    <ClCompile Include="src\network\ZmqRecvThread.cpp" />
-    <ClCompile Include="src\network\ZmqSendThread.cpp" />
     <ClCompile Include="src\network\ConsentStore.cpp" />
     <ClCompile Include="src\network\FeedbackApi.cpp" />
     <ClCompile Include="src\network\EventUploadThread.cpp" />
@@ -154,7 +175,6 @@
     <ClCompile Include="src\network\StatsApi.cpp" />
     <ClCompile Include="src\network\TokenStore.cpp" />
     <ClCompile Include="src\network\WinHttpClient.cpp" />
-    <ClCompile Include="src\network\ZmqFrameSender.cpp" />
     <ClCompile Include="src\render\D2DRenderer.cpp" />
     <ClCompile Include="src\render\OverlayPainter.cpp" />
     <ClCompile Include="src\render\RenderThread.cpp" />
@@ -164,4 +184,18 @@
     <None Include="CMakeLists.txt" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+  <Import Project="$(SolutionDir)packages\Microsoft.ML.OnnxRuntime.1.18.1\build\native\Microsoft.ML.OnnxRuntime.targets" Condition="Exists('$(SolutionDir)packages\Microsoft.ML.OnnxRuntime.1.18.1\build\native\Microsoft.ML.OnnxRuntime.targets')" />
+  <Target Name="EnsureNuGetPackageBuildImports" BeforeTargets="PrepareForBuild">
+    <PropertyGroup>
+      <ErrorText>NuGet 패키지 Microsoft.ML.OnnxRuntime 1.18.1 이 없습니다. 솔루션에서 NuGet 복원을 실행하세요.</ErrorText>
+    </PropertyGroup>
+    <Error Condition="!Exists('$(SolutionDir)packages\Microsoft.ML.OnnxRuntime.1.18.1\build\native\Microsoft.ML.OnnxRuntime.targets')" Text="$(ErrorText)" />
+  </Target>
+  <ItemDefinitionGroup>
+    <PostBuildEvent>
+      <Command>if exist "$(ProjectDir)models\" ( xcopy /Y /I /E "$(ProjectDir)models\*" "$(OutDir)models\" )
+xcopy /Y "$(SolutionDir)packages\Microsoft.ML.OnnxRuntime.1.18.1\runtimes\win-x64\native\onnxruntime.dll" "$(OutDir)"
+xcopy /Y "$(OpenCVBinDir)\$(OpenCVWorldDll)" "$(OutDir)"</Command>
+    </PostBuildEvent>
+  </ItemDefinitionGroup>
 </Project>
