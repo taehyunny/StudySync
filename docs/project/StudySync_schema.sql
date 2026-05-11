@@ -63,6 +63,14 @@ CREATE TABLE IF NOT EXISTS focus_logs (
   state VARCHAR(20) NOT NULL,
   is_absent TINYINT(1) NOT NULL DEFAULT 0,
   is_drowsy TINYINT(1) NOT NULL DEFAULT 0,
+  ear FLOAT NULL,
+  neck_angle FLOAT NULL,
+  shoulder_diff FLOAT NULL,
+  head_yaw FLOAT NULL,
+  head_pitch FLOAT NULL,
+  face_detected INT NULL,
+  phone_detected INT NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
 
   KEY idx_focus_logs_session_ts (session_id, ts),
   KEY idx_focus_logs_session_timestamp_ms (session_id, timestamp_ms),
@@ -158,4 +166,3 @@ CREATE TABLE IF NOT EXISTS models (
   UNIQUE KEY uk_models_type_version (model_type, version),
   KEY idx_models_type_active (model_type, is_active)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-

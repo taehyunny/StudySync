@@ -322,6 +322,13 @@ class MainServerClient:
         is_absent: bool,
         is_drowsy: bool,
         timestamp_ms: Optional[int] = None,
+        ear: Optional[float] = None,
+        neck_angle: Optional[float] = None,
+        shoulder_diff: Optional[float] = None,
+        head_yaw: Optional[float] = None,
+        head_pitch: Optional[float] = None,
+        face_detected: Optional[int] = None,
+        phone_detected: Optional[int] = None,
     ) -> bool:
         """
         집중도 로그 전송 (1000)
@@ -340,6 +347,20 @@ class MainServerClient:
             "is_absent":        is_absent,
             "is_drowsy":        is_drowsy,
         }
+        if ear is not None:
+            payload["ear"] = round(ear, 4)
+        if neck_angle is not None:
+            payload["neck_angle"] = round(neck_angle, 2)
+        if shoulder_diff is not None:
+            payload["shoulder_diff"] = round(shoulder_diff, 2)
+        if head_yaw is not None:
+            payload["head_yaw"] = round(head_yaw, 2)
+        if head_pitch is not None:
+            payload["head_pitch"] = round(head_pitch, 2)
+        if face_detected is not None:
+            payload["face_detected"] = int(face_detected)
+        if phone_detected is not None:
+            payload["phone_detected"] = int(phone_detected)
         return await self._send_with_ack(payload)
 
     async def push_posture_log(
