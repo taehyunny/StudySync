@@ -25,6 +25,7 @@ BEGIN_MESSAGE_MAP(CMainFrame, CFrameWnd)
     ON_BN_CLICKED(IDC_BTN_STOP_CAPTURE, OnBnClickedStop)
     ON_MESSAGE(WM_STOP_CAPTURE, OnStopCaptureMsg)
     ON_MESSAGE(WM_SESSION_STARTED, OnSessionStarted)
+    ON_MESSAGE(WM_DESTROY_CAPTURE_VIEW, OnDestroyCaptureView)
 END_MESSAGE_MAP()
 
 static constexpr int kTabH = 28;
@@ -155,7 +156,7 @@ void CMainFrame::OnSize(UINT nType, int cx, int cy)
 
 void CMainFrame::start_capture()
 {
-    if (capturing_) return;
+    if (capturing_ || tearing_down_) return;
 
     SYSTEMTIME st;
     GetLocalTime(&st);
@@ -164,15 +165,24 @@ void CMainFrame::start_capture()
              st.wYear, st.wMonth, st.wDay,
              st.wHour, st.wMinute, st.wSecond);
 
+    // 세션 폴더명: 20250511_143022 형식 (사람이 읽기 쉬운 날짜+시각)
+    char clip_dt[20];
+    snprintf(clip_dt, sizeof(clip_dt), "%04d%02d%02d_%02d%02d%02d",
+             st.wYear, st.wMonth, st.wDay,
+             st.wHour, st.wMinute, st.wSecond);
+
+    ClientTransportConfig config;
+    config.clip_directory = std::string("event_clips/") + clip_dt;
+
     // 탭 UI 숨기기
     tab_ctrl_.ShowWindow(SW_HIDE);
     for (auto* p : panels_) if (p) p->ShowWindow(SW_HIDE);
 
-    // 캡처 뷰 생성 (전체화면) — 세션 ID 없이 먼저 시작
+    // 캡처 뷰 생성 (전체화면)
     CRect rc;
     GetClientRect(&rc);
     const CString cls = AfxRegisterWndClass(CS_HREDRAW | CS_VREDRAW);
-    capture_view_ = new CStudySyncClientView({});
+    capture_view_ = new CStudySyncClientView(config);
     capture_view_->Create(cls, nullptr,
                           WS_CHILD | WS_VISIBLE | WS_CLIPSIBLINGS,
                           rc, this, AFX_IDW_PANE_FIRST);
@@ -216,6 +226,11 @@ void CMainFrame::start_capture()
 void CMainFrame::stop_capture()
 {
     if (!capturing_ || !capture_view_) return;
+    tearing_down_ = true;
+
+    // 스레드 정리 완료 전까지 시작 버튼 비활성화
+    if (auto* home = static_cast<CHomePanel*>(panels_[TAB_HOME]))
+        home->set_start_enabled(false);
 
     // 복기 이벤트 확인 (뷰 종료 전에)
     {
@@ -232,7 +247,7 @@ void CMainFrame::stop_capture()
         font_stop_.DeleteObject();
     }
 
-    // capturing_ 먼저 해제 + 탭 UI 복원 → DestroyWindow 스레드 join 전에 화면 전환
+    // 메인 화면 즉시 복원 — 스레드 정리 전에 UI 전환해서 프리징 방지
     capturing_ = false;
     tab_ctrl_.ShowWindow(SW_SHOW);
     if (panels_[active_tab_]) panels_[active_tab_]->ShowWindow(SW_SHOW);
@@ -243,10 +258,34 @@ void CMainFrame::stop_capture()
     }
     RedrawWindow(nullptr, nullptr, RDW_INVALIDATE | RDW_UPDATENOW | RDW_ALLCHILDREN);
 
-    // 캡처 뷰 종료 (OnDestroy → 세션 종료 API + 스레드 정리)
-    capture_view_->DestroyWindow();
-    delete capture_view_;
+    // 스레드 정리를 백그라운드에서 수행 — UI 스레드 블로킹 없음
+    // 완료 후 WM_DESTROY_CAPTURE_VIEW 메시지로 DestroyWindow 요청
+    CStudySyncClientView* view = capture_view_;
     capture_view_ = nullptr;
+
+    const HWND frame_hwnd = m_hWnd;
+    std::thread([view, frame_hwnd]() {
+        view->stop_all_threads();
+        ::PostMessage(frame_hwnd, WM_DESTROY_CAPTURE_VIEW,
+                      0, reinterpret_cast<LPARAM>(view));
+    }).detach();
+}
+
+// 백그라운드 스레드가 모든 스레드 정리를 완료한 뒤 UI 스레드에서 호출
+LRESULT CMainFrame::OnDestroyCaptureView(WPARAM, LPARAM lParam)
+{
+    CStudySyncClientView* view = reinterpret_cast<CStudySyncClientView*>(lParam);
+    if (view) {
+        view->DestroyWindow();
+        delete view;
+    }
+
+    // 구 뷰 완전 소멸 → 이제 새 세션 시작 가능
+    tearing_down_ = false;
+    if (auto* home = static_cast<CHomePanel*>(panels_[TAB_HOME]))
+        home->set_start_enabled(true);
+
+    return 0;
 }
 
 // ── 버튼 핸들러 ─────────────────────────────────────────────
@@ -270,11 +309,15 @@ LRESULT CMainFrame::OnSessionStarted(WPARAM wParam, LPARAM)
     if (capturing_ && capture_view_) {
         const long long session_id = static_cast<long long>(wParam);
         capture_view_->update_session_id(session_id);
-
-        // 세션별 클립 폴더 경로도 갱신
-        capture_view_->set_clip_directory("event_clips/" + std::to_string(session_id));
+        // 클립 폴더는 세션 시작 시각 기반으로 이미 설정됨 — session_id로 변경하지 않음
     }
     return 0;
+}
+
+void CMainFrame::update_camera_fps(int fps)
+{
+    if (capturing_ && capture_view_)
+        capture_view_->update_camera_fps(fps);
 }
 
 // ── 종료 ────────────────────────────────────────────────────

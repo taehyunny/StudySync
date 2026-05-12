@@ -1,5 +1,6 @@
 #include "pch.h"
 #include "StudySyncClientView.h"
+#include "network/FpsStore.h"
 #include "network/WinHttpClient.h"
 #include "resource.h"
 
@@ -18,6 +19,7 @@ BEGIN_MESSAGE_MAP(CStudySyncClientView, CWnd)
     ON_WM_ERASEBKGND()
     ON_WM_SIZE()
     ON_WM_TIMER()
+    ON_MESSAGE(WM_APP + 1, &CStudySyncClientView::OnCalibrationComplete)
 END_MESSAGE_MAP()
 
 namespace {
@@ -32,8 +34,6 @@ std::string current_iso8601()
     return buf;
 }
 } // namespace
-
-// ── 생성 ───────────────────────────────────────────────────────
 
 CStudySyncClientView::CStudySyncClientView(ClientTransportConfig config)
     : transport_config_(std::move(config))
@@ -58,17 +58,16 @@ CStudySyncClientView::~CStudySyncClientView()
 {
 }
 
-// ── 공개 인터페이스 ────────────────────────────────────────────
-
 void CStudySyncClientView::update_session_id(long long session_id)
 {
     session_id_ = session_id;
-    if (transports_.log_sink) {
-        transports_.log_sink->set_session_id(session_id);
-    }
-    // AI TCP 클라이언트는 이미 동작 중이므로 재시작 없이 session_id만 갱신
-    // 이후 전송 패킷부터 새 session_id가 반영됨
+    if (transports_.log_sink) transports_.log_sink->set_session_id(session_id);
     ai_tcp_client_.update_session_id(session_id);
+}
+
+void CStudySyncClientView::update_camera_fps(int fps)
+{
+    ai_tcp_client_.set_camera_fps(fps);
 }
 
 void CStudySyncClientView::set_clip_directory(const std::string& dir)
@@ -83,9 +82,7 @@ void CStudySyncClientView::set_session_id(long long session_id,
     session_start_time_ = start_time;
     last_ai_state_.clear();
 
-    if (transports_.log_sink) {
-        transports_.log_sink->set_session_id(session_id);
-    }
+    if (transports_.log_sink) transports_.log_sink->set_session_id(session_id);
 
     session_start_steady_ms_ = static_cast<std::uint64_t>(
         std::chrono::duration_cast<std::chrono::milliseconds>(
@@ -97,15 +94,20 @@ void CStudySyncClientView::set_session_id(long long session_id,
 
 void CStudySyncClientView::begin_calibration()
 {
-    constexpr int kCalibSec = 5;
     {
         std::lock_guard<std::mutex> lock(calib_mtx_);
         calib_samples_.clear();
         calibrating_ = true;
-        calib_tick_  = kCalibSec;
     }
-    render_thread_.set_calibration_countdown(kCalibSec);
-    SetTimer(IDT_CALIB, 1000, nullptr);
+
+    // 150프레임 완료 시 UI 스레드로 신호 (PostMessage는 맴티스레드 안전)
+    ai_tcp_client_.set_on_calibration_complete([this]() {
+        PostMessage(WM_CALIB_COMPLETE, 0, 0);
+    });
+    ai_tcp_client_.set_calibration_mode(true);
+
+    // 오버레이에 안내 메시지 표시 (countdown=1 값으로 표시 중임을 표현)
+    render_thread_.set_calibration_countdown(1);
 }
 
 void CStudySyncClientView::finish_calibration()
@@ -135,19 +137,23 @@ void CStudySyncClientView::finish_calibration()
         neck_avg, threshold, calib_samples_.size());
     OutputDebugStringA(dbg);
 
-    // 캘리브레이션 완료 → 기본 상태 "공부 중"으로 초기화 (AI 응답 전까지 표시)
     AnalysisResult default_result;
-    default_result.state        = "focus";
-    default_result.posture_ok   = true;
+    default_result.state         = "focus";
+    default_result.posture_ok    = true;
     default_result.face_detected = 1;
     result_buffer_.update(default_result);
 
+    // 완료 메시지 잠시 표시 (countdown=0) 후 1.5초 후 숨김
     render_thread_.set_calibration_countdown(0);
     SetTimer(IDT_CALIB_HIDE, 1500, nullptr);
     SetTimer(IDT_LOG_FLUSH, 10'000, nullptr);
 }
 
-// ── 윈도우 메시지 ──────────────────────────────────────────────
+LRESULT CStudySyncClientView::OnCalibrationComplete(WPARAM, LPARAM)
+{
+    finish_calibration();
+    return 0;
+}
 
 void CStudySyncClientView::request_server_stats()
 {
@@ -164,7 +170,6 @@ int CStudySyncClientView::OnCreate(LPCREATESTRUCT lpCreateStruct)
 {
     if (CWnd::OnCreate(lpCreateStruct) == -1) return -1;
 
-    // ── 파이프라인 시작 ─────────────────────────────────────
     worker_pool_.start();
     capture_thread_.start(0, transport_config_.capture_fps);
     render_thread_.start(m_hWnd, result_buffer_);
@@ -196,7 +201,6 @@ int CStudySyncClientView::OnCreate(LPCREATESTRUCT lpCreateStruct)
             if (session_id_ > 0 && transports_.log_sink)
                 transports_.log_sink->append_analysis(r);
 
-            // AI 서버 state 변화 시에만 알림 (로컬 임계값 기반 알림 제거)
             if (!r.state.empty() && r.state != last_ai_state_) {
                 last_ai_state_ = r.state;
                 if (r.state == "drowsy") {
@@ -205,7 +209,7 @@ int CStudySyncClientView::OnCreate(LPCREATESTRUCT lpCreateStruct)
                     alert.target       = AlertTarget::Popup;
                     alert.timestamp_ms = r.timestamp_ms;
                     alert.title        = "졸음 감지";
-                    alert.message      = "잠깐 스트레칭을 해보세요.";
+                    alert.message      = "잠깔 스트레칭을 해보세요.";
                     alert_manager_.feed_server_alert(alert);
                 } else if (r.state == "distracted") {
                     Alert alert;
@@ -213,7 +217,7 @@ int CStudySyncClientView::OnCreate(LPCREATESTRUCT lpCreateStruct)
                     alert.target       = AlertTarget::Popup;
                     alert.timestamp_ms = r.timestamp_ms;
                     alert.title        = "집중력 저하 감지";
-                    alert.message      = "다시 집중해봐요!";
+                    alert.message      = "다시 집중해보요!";
                     alert_manager_.feed_server_alert(alert);
                 } else if (r.state == "absent") {
                     Alert alert;
@@ -226,6 +230,7 @@ int CStudySyncClientView::OnCreate(LPCREATESTRUCT lpCreateStruct)
                 }
             }
         });
+        ai_tcp_client_.set_camera_fps(FpsStore{}.load());
         ai_tcp_client_.start(
             transport_config_.ai_server_host,
             transport_config_.ai_server_port,
@@ -246,6 +251,27 @@ int CStudySyncClientView::OnCreate(LPCREATESTRUCT lpCreateStruct)
     request_server_stats();
     SetTimer(IDT_STATS_FETCH, 60'000, nullptr);
     return 0;
+}
+
+void CStudySyncClientView::stop_all_threads()
+{
+    if (threads_stopped_.exchange(true)) return;
+
+    if (transports_.log_sink) transports_.log_sink->flush();
+
+    clip_garbage_collector_.stop();
+    main_heartbeat_.stop();
+    ai_heartbeat_.stop();
+    alert_dispatch_thread_.stop();
+    event_upload_thread_.stop();
+    if (transport_config_.use_dummy_ai) {
+        dummy_generator_.stop();
+    } else {
+        ai_tcp_client_.stop();
+    }
+    render_thread_.stop();
+    capture_thread_.stop();
+    worker_pool_.stop();
 }
 
 void CStudySyncClientView::OnDestroy()
@@ -270,64 +296,26 @@ void CStudySyncClientView::OnDestroy()
     }
 
     KillTimer(IDT_LOG_FLUSH);
-    KillTimer(IDT_CALIB);
     KillTimer(IDT_CALIB_HIDE);
     KillTimer(IDT_STATS_FETCH);
 
-    if (transports_.log_sink) transports_.log_sink->flush();
-
-    clip_garbage_collector_.stop();
-    main_heartbeat_.stop();
-    ai_heartbeat_.stop();
-    alert_dispatch_thread_.stop();
-    event_upload_thread_.stop();
-    if (transport_config_.use_dummy_ai) {
-        dummy_generator_.stop();
-    } else {
-        ai_tcp_client_.stop();
-    }
-    render_thread_.stop();
-    capture_thread_.stop();
-    worker_pool_.stop();
-
+    stop_all_threads();
     CWnd::OnDestroy();
 }
 
-void CStudySyncClientView::OnPaint()
-{
-    ValidateRect(nullptr);
-}
-
-BOOL CStudySyncClientView::OnEraseBkgnd(CDC* /*pDC*/)
-{
-    return TRUE;
-}
+void CStudySyncClientView::OnPaint()    { ValidateRect(nullptr); }
+BOOL CStudySyncClientView::OnEraseBkgnd(CDC*) { return TRUE; }
 
 void CStudySyncClientView::OnSize(UINT nType, int cx, int cy)
 {
     CWnd::OnSize(nType, cx, cy);
-
-    if (cx > 0 && cy > 0) {
+    if (cx > 0 && cy > 0)
         render_thread_.notify_resize(static_cast<UINT>(cx), static_cast<UINT>(cy));
-    }
 }
 
 void CStudySyncClientView::OnTimer(UINT_PTR nIDEvent)
 {
-    if (nIDEvent == IDT_CALIB) {
-        int remaining = 0;
-        {
-            std::lock_guard<std::mutex> lock(calib_mtx_);
-            --calib_tick_;
-            remaining = calib_tick_;
-        }
-        if (remaining > 0) {
-            render_thread_.set_calibration_countdown(remaining);
-        } else {
-            KillTimer(IDT_CALIB);
-            finish_calibration();
-        }
-    } else if (nIDEvent == IDT_CALIB_HIDE) {
+    if (nIDEvent == IDT_CALIB_HIDE) {
         KillTimer(IDT_CALIB_HIDE);
         render_thread_.set_calibration_countdown(-1);
     } else if (nIDEvent == IDT_LOG_FLUSH) {
@@ -338,7 +326,5 @@ void CStudySyncClientView::OnTimer(UINT_PTR nIDEvent)
     } else if (nIDEvent == IDT_STATS_FETCH) {
         request_server_stats();
     }
-
     CWnd::OnTimer(nIDEvent);
 }
-

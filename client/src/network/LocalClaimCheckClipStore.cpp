@@ -37,10 +37,11 @@ std::uint64_t now_ms()
 const char* event_type_name(PostureEventType type)
 {
     switch (type) {
-    case PostureEventType::Drowsy: return "drowsy";
-    case PostureEventType::Absent: return "absent";
+    case PostureEventType::Drowsy:    return "drowsy";
+    case PostureEventType::Absent:    return "absent";
+    case PostureEventType::Focus:     return "focus";
     case PostureEventType::BadPosture:
-    default: return "distracted";
+    default:                          return "distracted";
     }
 }
 }
@@ -58,7 +59,16 @@ ClipRef LocalClaimCheckClipStore::store_clip(const PostureEvent& event)
     const std::string clip_id = "local:event_" + std::to_string(event.timestamp_ms);
     const std::uint64_t created_at = now_ms();
     const std::uint64_t expires_at = created_at + static_cast<std::uint64_t>(retention_days_) * 24ULL * 60ULL * 60ULL * 1000ULL;
-    fs::path event_dir = fs::path(clip_directory_) / ("event_" + std::to_string(event.timestamp_ms));
+
+    char time_str[8]{};
+    {
+        const time_t ts = static_cast<time_t>(event.timestamp_ms / 1000);
+        struct tm ltm{};
+        localtime_s(&ltm, &ts);
+        strftime(time_str, sizeof(time_str), "%H%M%S", &ltm);
+    }
+    const std::string event_dir_name = std::string(time_str) + "_" + event_type_name(event.type);
+    fs::path event_dir = fs::path(clip_directory_) / event_dir_name;
     fs::create_directories(event_dir);
 
     std::size_t written = 0;
@@ -71,10 +81,11 @@ ClipRef LocalClaimCheckClipStore::store_clip(const PostureEvent& event)
 
     if (first_valid) {
         const cv::Size frame_size(first_valid->cols, first_valid->rows);
+        const double write_fps = event.camera_fps > 0 ? static_cast<double>(event.camera_fps) : 30.0;
         cv::VideoWriter writer(
             mp4_path.string(),
             cv::VideoWriter::fourcc('m', 'p', '4', 'v'),
-            30.0,
+            write_fps,
             frame_size);
 
         if (writer.isOpened()) {
