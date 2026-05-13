@@ -45,6 +45,10 @@ from pathlib import Path
 CAPTURE_FPS = 30                          # 30fps (TCN 시계열용)
 CAPTURE_INTERVAL = 1.0 / CAPTURE_FPS
 
+# 시퀀스 단위 캡처 설정
+SEQUENCE_LENGTH = 150     # TCN 1 시퀀스 = 150프레임 (5초 분량)
+                          # 캡처 정지 시 이 단위로 안 채워진 프레임은 버림
+
 # 경로 자동 설정
 THIS_FILE     = Path(__file__).resolve()
 AI_SERVER_DIR = THIS_FILE.parent
@@ -223,6 +227,37 @@ def init_all_csvs():
     print()
 
 
+def flush_buffer_to_csv(buffer: list[dict], label: str):
+    """
+    150프레임이 모인 시퀀스 버퍼를 CSV에 일괄 저장
+    얼굴 감지 끊김 없이 연속된 시퀀스만 저장됨 (학습 품질 보장)
+    """
+    csv_path = get_csv_path(label)
+    rows = []
+    timestamp_ms = int(time.time() * 1000)
+
+    # 시퀀스 시작 시각 기준으로 33ms 간격 부여 (30fps)
+    start_ts = timestamp_ms - int((len(buffer) - 1) * (1000 / CAPTURE_FPS))
+
+    for i, feat in enumerate(buffer):
+        ts = start_ts + int(i * (1000 / CAPTURE_FPS))
+        rows.append([
+            ts,
+            feat["ear"],
+            feat["neck_angle"],
+            feat["shoulder_diff"],
+            feat["head_yaw"],
+            feat["head_pitch"],
+            feat["face_detected"],
+            feat["phone_detected"],
+            label,
+        ])
+
+    with open(csv_path, "a", encoding="utf-8", newline="") as f:
+        writer = csv.writer(f)
+        writer.writerows(rows)
+
+
 def append_features(features: dict, label: str):
     """특징값 1행을 해당 클래스 CSV에 추가"""
     csv_path = get_csv_path(label)
@@ -342,6 +377,9 @@ def main():
     skipped_count    = 0
     captured_count   = 0
 
+    # 시퀀스 버퍼 (150프레임 채워지면 CSV에 일괄 저장)
+    sequence_buffer: list[dict] = []
+
     fps_window = []
     fps_now    = 0.0
 
@@ -365,25 +403,40 @@ def main():
                 face_ok  = features is not None
 
                 if features is not None:
-                    append_features(features, current_class)
+                    # 버퍼에 임시 저장 (CSV에 바로 쓰지 않음)
+                    sequence_buffer.append(features)
                     captured_count += 1
 
                     fps_window.append(now)
                     fps_window = [t for t in fps_window if now - t <= 1.0]
                     fps_now = len(fps_window)
 
-                    # 30프레임마다 한 번씩 콘솔 출력
-                    if captured_count % 30 == 0:
-                        total = counts[current_class] + 1
+                    # 150프레임 채워지면 → CSV 일괄 저장 + 버퍼 비우기
+                    if len(sequence_buffer) >= SEQUENCE_LENGTH:
+                        flush_buffer_to_csv(sequence_buffer, current_class)
+                        completed_sequences = (counts[current_class] + SEQUENCE_LENGTH) // SEQUENCE_LENGTH
+                        print(f"  ✅ [{CLASS_KR[current_class]}] 시퀀스 {completed_sequences} 완성! "
+                              f"({SEQUENCE_LENGTH}프레임 저장)")
+                        sequence_buffer.clear()
+
+                    # 30프레임마다 진행 상황 출력
+                    elif captured_count % 30 == 0:
+                        progress = len(sequence_buffer)
                         print(f"  📊 [{CLASS_KR[current_class]}] "
-                              f"{total} frames  "
+                              f"버퍼: {progress}/{SEQUENCE_LENGTH}f  "
                               f"EAR={features['ear']:.3f} "
                               f"neck={features['neck_angle']:+.1f}° "
                               f"yaw={features['head_yaw']:+.1f}°")
                 else:
                     skipped_count += 1
+                    # 얼굴 미감지 시 시퀀스 깨짐 방지 → 버퍼 초기화
+                    if sequence_buffer:
+                        discarded = len(sequence_buffer)
+                        sequence_buffer.clear()
+                        print(f"  ⚠️  얼굴 미감지 → 버퍼 {discarded}프레임 폐기 "
+                              f"(시퀀스 연속성 보장)")
                     if skipped_count % 30 == 1:
-                        print(f"  ⚠️  얼굴 미감지 → 스킵 (총 {skipped_count}회)")
+                        print(f"      (총 미감지 {skipped_count}회)")
         else:
             # 캡처 안 할 때도 얼굴 감지만 빠르게 (UI 표시용)
             face_check = face_mesh.process(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
@@ -397,19 +450,24 @@ def main():
         key = cv2.waitKey(1) & 0xFF
 
         if key == ord("q"):
+            if sequence_buffer:
+                discarded = len(sequence_buffer)
+                sequence_buffer.clear()
+                print(f"\n🗑️  종료 — 미완성 버퍼 {discarded}프레임 폐기")
             break
-        elif key == ord("1"):
-            current_class = "focus"
+        elif key in (ord("1"), ord("2"), ord("3")):
+            class_map = {ord("1"): "focus", ord("2"): "distracted", ord("3"): "drowsy"}
+            new_class = class_map[key]
+
+            # 클래스 바뀌면 기존 미완성 버퍼 폐기
+            if sequence_buffer and new_class != current_class:
+                discarded = len(sequence_buffer)
+                sequence_buffer.clear()
+                print(f"  🗑️  클래스 변경으로 미완성 버퍼 {discarded}프레임 폐기")
+
+            current_class = new_class
             is_capturing = False
-            print(f"▶ 클래스 선택: {CLASS_KR['focus']}")
-        elif key == ord("2"):
-            current_class = "distracted"
-            is_capturing = False
-            print(f"▶ 클래스 선택: {CLASS_KR['distracted']}")
-        elif key == ord("3"):
-            current_class = "drowsy"
-            is_capturing = False
-            print(f"▶ 클래스 선택: {CLASS_KR['drowsy']}")
+            print(f"▶ 클래스 선택: {CLASS_KR[current_class]}")
         elif key == ord("s"):
             if current_class is None:
                 print("⚠️  먼저 클래스를 선택하세요 (1/2/3)")
@@ -417,6 +475,13 @@ def main():
                 is_capturing = not is_capturing
                 state = "시작" if is_capturing else "정지"
                 print(f"{'▶' if is_capturing else '⏸'} 캡처 {state}: {CLASS_KR[current_class]}")
+
+                # 정지 시 미완성 버퍼는 폐기 (시퀀스 단위 보장)
+                if not is_capturing and sequence_buffer:
+                    discarded = len(sequence_buffer)
+                    sequence_buffer.clear()
+                    print(f"  🗑️  미완성 시퀀스 {discarded}프레임 폐기 "
+                          f"(150프레임 미만이라 학습용 시퀀스 형성 불가)")
 
     # 종료 시 최종 현황 출력
     print("\n📊 최종 수집 현황:")
